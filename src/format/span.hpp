@@ -28,7 +28,7 @@
  * 此外，如果要使用字符'|'，可以使用"\|"。
  *
  * @example
- *
+ * ```
  * std::vector v { 1, 2, 3, 4, 5, 6 };
  * assert(std::format("{}", std::span(v))
  *         == std::string_view("[1, 2, 3, 4, 5, 6]"));
@@ -48,7 +48,7 @@
  * std::string str = "abc";
  * assert(std::format(L"{}", std::span(str.begin(), str.end()))
  *         == std::wstring_view(L"[a, b, c]"));
- *
+ * ```
  */
 template<typename T, size_t Extend, typename CharT>
 class std::formatter<std::span<T, Extend>, CharT> {

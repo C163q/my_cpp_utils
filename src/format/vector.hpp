@@ -29,7 +29,7 @@
  * 此外，如果要使用字符'|'，可以使用"\|"。
  *
  * @example
- *
+ * ```
  * assert(std::format("{}", std::vector{ 1, 2, 3, 4, 5, 6 })
  *         == std::string_view("[1, 2, 3, 4, 5, 6]"));
  *
@@ -45,6 +45,7 @@
  *
  * assert(std::format(L"{}", std::vector{ 'a', 'b', 'c' })
  *         == std::wstring_view(L"[a, b, c]"));
+ * ```
  */
 template<typename T, typename Alloc, typename CharT>
     requires (!std::is_same_v<T, bool>)
