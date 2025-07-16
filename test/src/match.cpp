@@ -1,6 +1,5 @@
 #include"../../src/rs/match.hpp"
 #include<cassert>
-#include<iostream>
 #include<variant>
 #include<string_view>
 
