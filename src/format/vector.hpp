@@ -1,3 +1,8 @@
+/**
+ * @file format/vector.hpp
+ * @brief 为std::span类提供std::formatter的实现
+ */
+
 #include<algorithm>
 #include<cstddef>
 #include<format>
@@ -9,6 +14,8 @@
 
 
 /**
+ * @brief 为标准库std::formatter实现std::vector的特化。
+ *
  * 对于一个std::vector其格式化字符串的形式如下：
  * 
  * 使用'|'表示格式化字符串中，前面部分是用于控制vector格式的，后半部分是用于控制其中每个元素的格式的
@@ -29,7 +36,7 @@
  * 此外，如果要使用字符'|'，可以使用"\|"。
  *
  * @example
- * ```
+ * ```cpp
  * assert(std::format("{}", std::vector{ 1, 2, 3, 4, 5, 6 })
  *         == std::string_view("[1, 2, 3, 4, 5, 6]"));
  *

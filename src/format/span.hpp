@@ -1,3 +1,8 @@
+/**
+ * @file format/span.hpp
+ * @brief 为std::span类提供std::formatter的实现
+ */
+
 #include<algorithm>
 #include<cstddef>
 #include<format>
@@ -8,6 +13,8 @@
 
 
 /**
+ * @brief 为标准库std::formatter实现std::span的特化。
+ *
  * 对于一个std::span其格式化字符串的形式如下：
  * 
  * 使用'|'表示格式化字符串中，前面部分是用于控制span格式的，后半部分是用于控制其中每个元素的格式的
@@ -28,7 +35,7 @@
  * 此外，如果要使用字符'|'，可以使用"\|"。
  *
  * @example
- * ```
+ * ```cpp
  * std::vector v { 1, 2, 3, 4, 5, 6 };
  * assert(std::format("{}", std::span(v))
  *         == std::string_view("[1, 2, 3, 4, 5, 6]"));

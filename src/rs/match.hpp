@@ -1,3 +1,8 @@
+/**
+ * @file rs/match.hpp
+ * @brief 在C++中实现类似rust中match关键字的效果
+ */
+
 #include <utility>
 #include<variant>
 
@@ -12,7 +17,7 @@ namespace C163q {
     overload(T...) -> overload<T...>;
 
     /**
-     * @brief 一个类似于rust语言match表达式的函数
+     * @brief 一个类似于rust语言match表达式的函数.
      *
      * @tparam T    std::variant内可保有的元素的类型
      * @tparam F    可调用对象的类型
@@ -26,7 +31,7 @@ namespace C163q {
      * 若std::variant内保有类型T，则会调用std::function<void(T)>
      *
      * @example
-     * ```
+     * ```cpp
      * std::variant<int, double, const char*> v { 1.0 };
      * std::string_view ret = C163q::match(v,
      *         [] (int i) { return "int"; },
@@ -38,7 +43,8 @@ namespace C163q {
      *
      * @warning 传入的函数func应当穷尽所有的可能性！
      * 以下是一个会导致编译错误的示例：
-     * ```
+     * @example
+     * ```cpp
      * std::variant<int, double, const char*> v { 1.0 };
      * std::string_view ret = C163q::match(v,
      *         [] (int i) { return "int"; },
@@ -49,7 +55,7 @@ namespace C163q {
      * 可以使用泛型lambda表达式通配剩余类型。
      *
      * @example
-     * ```
+     * ```cpp
      * std::variant<int, double, const char*> v { 1.0 };
      * std::string_view ret = C163q::match(v,
      *         [] (int i) { return "int"; },
