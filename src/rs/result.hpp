@@ -4,6 +4,7 @@
  */
 
 #include<functional>
+#include <optional>
 #include<type_traits>
 #include<utility>
 #include<variant>
@@ -91,7 +92,7 @@ namespace C163q {
          * assert(y.is_ok() == false);
          * ```
          */
-        constexpr bool is_ok() const noexcept {
+        [[nodiscard]] constexpr bool is_ok() const noexcept {
             return !m_data.index();
         }
 
@@ -115,9 +116,9 @@ namespace C163q {
          * assert(z.is_ok_and([](auto v) { return v > 1; }) == false);
          * ```
          */
-        constexpr bool is_ok_and(std::function<bool(const T&)> f)
+        [[nodiscard]] constexpr bool is_ok_and(std::function<bool(const T&)> f)
             const noexcept(noexcept(f(std::declval<T>()))) {
-            return !m_data.index() && f(std::get<0>(m_data));
+            return !m_data.index() && f(std::get<T>(m_data));
         }
 
         /**
@@ -134,8 +135,83 @@ namespace C163q {
          * assert(y.is_ok() == false);
          * ```
          */
-        constexpr bool is_err() const noexcept {
+        [[nodiscard]] constexpr bool is_err() const noexcept {
             return !!m_data.index();
+        }
+
+        /**
+         * @brief 当Result处于Err状态且其值满足谓词f时返回true，否则false
+         *
+         * @param f 参数为const E&且返回bool的谓词，
+         *          Result内保有的数据的常引用会被传入。
+         *
+         * @return 当Result处于Err状态且其保有满足谓词f的值时返回true，否则false
+         *
+         * @example
+         * ```cpp
+         * auto x = C163q::Err<unsigned, std::invalid_argument>("gets invalid argument");
+         * assert(x.is_err_and([](const std::invalid_argument& e) {
+         *             return std::string_view("gets invalid argument") == e.what();
+         *             }) == true);
+         *
+         * C163q::Result<long, const char*> y("Error");
+         * assert(y.is_err_and([](const char* p) { return p[0] == 'e'; }) == false);
+         *
+         * auto z = C163q::Ok<std::exception, unsigned>(1);
+         * assert(z.is_err_and([](const std::exception&) { return true; }) == false);
+         * ```
+         */
+        [[nodiscard]] constexpr bool is_err_and(std::function<bool(const E&)> f)
+            const noexcept(noexcept(f(std::declval<E>()))) {
+            return !!m_data.index() && f(std::get<E>(m_data));
+        }
+
+        template<typename U>
+            requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+        [[nodiscard]] constexpr U& get() {
+            return std::get<U>(m_data);
+        }
+
+        template<typename U>
+            requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+        [[nodiscard]] constexpr const U& get() const {
+            return std::get<U>(m_data);
+        }
+
+        template<size_t I>
+            requires (I == 0 || I == 1)
+        [[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<T, E>>& get() {
+            return std::get<I>(m_data);
+        }
+
+        template<size_t I>
+            requires (I == 0 || I == 1)
+        [[nodiscard]] constexpr const std::variant_alternative_t<I, std::variant<T, E>>& get() const {
+            return std::get<I>(m_data);
+        }
+
+        /**
+         * @brief 将Result<T, E>转换为std::optional<T>
+         *
+         * 将自身转换为std::optional<T>，自身保有的值将会被移动，若为Err状态，则为空值。
+         *
+         * @return 一个std::optional<T>。在Ok状态下，移动构造一个有值的std::optional<T>，
+         *         在Err状态下，返回一个无值的std::optional<T>
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(std::vector{ 1, 2, 3, 4 });
+         * auto x_cmp = std::vector{ 1, 2, 3, 4 };
+         * assert(x.ok().value() == x_cmp);
+         * assert(std::get<0>(x).size() == 0); // moved
+         * 
+         * auto y = C163q::Err<unsigned>("Err");
+         * assert(y.ok().has_value() == false);
+         * ```
+         */
+        [[nodiscard]] constexpr std::optional<T> ok() {
+            if (is_err()) return std::nullopt;
+            return std::move(std::get<0>(m_data));
         }
 
 
@@ -149,8 +225,8 @@ namespace C163q {
      *
      * 由于T类型可推导，因此类型参数中E在前。
      *
-     * @tparam E 构造的Result的错误类型
-     * @tparam T 构造的Result的存储数据的类型
+     * @tparam E 构造的Result的错误类型std::decay_t<E>
+     * @tparam T 构造的Result的存储数据的类型std::decay_t<T>
      * @param value 构造Result的Ok状态的值
      *
      * @return 构造的Result
@@ -164,8 +240,9 @@ namespace C163q {
      * ```
      */
     template<typename E, typename T>
-    Result<T, E> Ok(T&& value) noexcept(std::is_nothrow_constructible_v<T, T>) {
-        return Result<T, E>(std::forward<T>(value));
+    Result<std::decay_t<T>, std::decay_t<E>> Ok(T&& value)
+        noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, T&&>) {
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::forward<T>(value));
     }
 
     /**
@@ -188,8 +265,9 @@ namespace C163q {
      * ```
      */
     template<typename E, typename T, typename ...Args>
-    Result<T, E> Ok(Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>) {
-        return Result<T, E>(std::in_place_type<T>, std::forward<Args>(args)...);
+    Result<std::decay_t<T>, std::decay_t<E>> Ok(Args&&... args)
+        noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, Args&&...>) {
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<T>, std::forward<Args>(args)...);
     }
 
     /**
@@ -210,8 +288,9 @@ namespace C163q {
      * ```
      */
     template<typename T, typename E>
-    Result<T, E> Err(E&& err) noexcept(std::is_nothrow_constructible_v<E, E>) {
-        return Result<T, E>(std::forward<E>(err));
+    Result<std::decay_t<T>, std::decay_t<E>> Err(E&& err)
+        noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, E&&>) {
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::forward<E>(err));
     }
 
     /**
@@ -232,10 +311,40 @@ namespace C163q {
      * ```
      */
     template<typename T, typename E, typename ...Args>
-    Result<T, E> Err(Args&&... args) noexcept(std::is_nothrow_constructible_v<E, Args...>) {
-        return Result<T, E>(std::in_place_type<E>, std::forward<Args>(args)...);
+    Result<std::decay_t<T>, std::decay_t<E>> Err(Args&&... args)
+        noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, Args&&...>) {
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<E>, std::forward<Args>(args)...);
     }
 
 }
 
+namespace std {
+
+    template<typename U, typename T, typename E>
+        requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+    [[nodiscard]] constexpr U& get(C163q::Result<T, E>& result) {
+        return result.template get<U>();
+    }
+
+    template<typename U, typename T, typename E>
+        requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+    [[nodiscard]] constexpr const U& get(const C163q::Result<T, E>& result) {
+        return result.template get<U>();
+    }
+
+    template<size_t I, typename T, typename E>
+        requires (I == 0 || I == 1)
+    [[nodiscard]] constexpr variant_alternative_t<I, std::variant<T, E>>& get(
+            C163q::Result<T, E>& result) {
+        return result.template get<I>();
+    }
+
+    template<size_t I, typename T, typename E>
+        requires (I == 0 || I == 1)
+    [[nodiscard]] constexpr const std::variant_alternative_t<I, std::variant<T, E>>& get(
+            const C163q::Result<T, E>& result) {
+        return result.template get<I>();
+    }
+
+}
 
