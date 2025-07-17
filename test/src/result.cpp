@@ -1,11 +1,12 @@
 #include"../../src/rs/result.hpp"
 #include<cassert>
 #include<exception>
-#include <optional>
-#include <stdexcept>
-#include <string_view>
+#include<optional>
+#include<print>
+#include<stdexcept>
+#include<string_view>
 #include<tuple>
-#include <vector>
+#include<vector>
 
 int main() {
     {
@@ -16,7 +17,7 @@ int main() {
         assert(y.is_ok() == false);
     }
     {
-        C163q::Result<unsigned, const char*> x(2);
+        C163q::Result<unsigned, const char*> x(2u);
         assert(x.is_ok_and([](auto v) { return v > 1; }) == true);
 
         auto y = C163q::Ok<const char*>(0u);
@@ -53,5 +54,31 @@ int main() {
         auto y = C163q::Err<unsigned>("Err");
         assert(y.ok().has_value() == false);
     }
+    {
+        auto x = C163q::Ok<const char*>(1);
+        assert(x.err().has_value() == false);
+
+        auto y = C163q::Err<unsigned>("Err");
+        assert(y.err().value()[0] == 'E');
+    }
+    {
+        auto Ok = [](int val) { return C163q::Ok<const char*>(val); };
+        std::vector<C163q::Result<int, const char*>> vec {
+            Ok(1), Ok(2), Ok(5), C163q::Err<int>("Err"), Ok(10), Ok(20)
+        };
+        std::vector<double> ret;
+        for (auto&& res : vec) {
+            auto val = res.map<double>([](auto val) { return val * 1.5; });
+            if (val.is_ok()) {
+                ret.push_back(val.get<0>());
+            } else {
+                ret.push_back(0);
+            }
+        }
+        std::vector<double> check{ 1 * 1.5, 2 * 1.5, 5 * 1.5, 0, 10 * 1.5, 20 * 1.5 };
+        assert(ret == check);
+    }
+
+    std::println("PASS!");
 }
 
