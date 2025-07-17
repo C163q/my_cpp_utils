@@ -1,6 +1,7 @@
 #include"../../src/rs/result.hpp"
 #include<cassert>
 #include<exception>
+#include<initializer_list>
 #include<optional>
 #include<print>
 #include<stdexcept>
@@ -74,9 +75,22 @@ int main() {
             } else {
                 ret.push_back(0);
             }
+            static_assert(noexcept(res.map<double>([](auto val) { return double(val); })));
         }
         std::vector<double> check{ 1 * 1.5, 2 * 1.5, 5 * 1.5, 0, 10 * 1.5, 20 * 1.5 };
         assert(ret == check);
+    }
+    {
+        C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
+        auto dst = src.map_into<std::vector<int>>([](auto&& v) {
+                for (auto&& e : v) {
+                    e *= 2;
+                }
+                return v;
+            });
+        std::vector<int> check{ 2, 4, 6, 8 };
+        assert(dst.get<0>() == check);
+        assert(src.get<0>().size() == 0);
     }
 
     std::println("PASS!");

@@ -4,7 +4,6 @@
  */
 
 #include<concepts>
-#include<functional>
 #include<optional>
 #include<type_traits>
 #include<utility>
@@ -57,6 +56,7 @@ namespace C163q {
          * @param value 要存储的异常
          */
         template<typename F>
+            requires std::constructible_from<E, F>
         constexpr explicit Result(F&& err) noexcept(std::is_nothrow_constructible_v<E, F>)
             : m_data(std::forward<F>(err)) {}
 
@@ -121,7 +121,11 @@ namespace C163q {
          * assert(z.is_ok_and([](auto v) { return v > 1; }) == false);
          * ```
          */
-        [[nodiscard]] constexpr bool is_ok_and(std::function<bool(const T&)> f)
+        template<typename F>
+            requires requires (F f, const T& t) {
+                { f(t) } -> std::same_as<bool>;
+            }
+        [[nodiscard]] constexpr bool is_ok_and(F f)
             const noexcept(noexcept(f(std::declval<T>()))) {
             return !m_data.index() && f(std::get<T>(m_data));
         }
@@ -166,7 +170,11 @@ namespace C163q {
          * assert(z.is_err_and([](const std::exception&) { return true; }) == false);
          * ```
          */
-        [[nodiscard]] constexpr bool is_err_and(std::function<bool(const E&)> f)
+        template<typename F>
+            requires requires (F f, const E& t) {
+                { f(t) } -> std::same_as<bool>;
+            }
+        [[nodiscard]] constexpr bool is_err_and(F f)
             const noexcept(noexcept(f(std::declval<E>()))) {
             return !!m_data.index() && f(std::get<E>(m_data));
         }
@@ -272,6 +280,12 @@ namespace C163q {
         }
 
         /**
+         * @brief 使用可调用对象将Result<T, E>映射为Result<U, E>，在Ok时调用，而Err时什么都不做
+         *
+         * 在Ok状态下时，const T&会被传入并将返回值作为构造Result<U, E>的U类型的值
+         * 在Err状态下，仅仅是复制构造E的值
+         *
+         * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
          *
          * @example
          * ```
@@ -293,13 +307,51 @@ namespace C163q {
          * ```
          */
         template<typename U, typename F>
-            requires requires (F f, const T& t) {
-                { f(t) } -> std::convertible_to<std::decay_t<U>>;
-            }
-        [[nodiscard]] constexpr Result<std::decay_t<U>, E> map(F func) const {
-            if (is_err()) return Result<std::decay_t<U>, E>(std::in_place_type<E> ,get<1>());
-            return Result<std::decay_t<U>, E>(std::in_place_type<std::decay_t<U>> ,func(get<0>()));
+            requires (requires (F f, const T& t) {
+                { f(t) } -> std::convertible_to<U>;
+            } && std::is_copy_constructible_v<E>)
+        [[nodiscard]] constexpr Result<U, E> map(F func) const
+            noexcept(std::is_nothrow_constructible_v<U, decltype(func(std::declval<T>()))> &&
+                     std::is_nothrow_copy_constructible_v<E>) {
+            if (is_err()) return Result<U, E>(std::in_place_type<E>, get<1>());
+            return Result<U, E>(std::in_place_type<U>, std::move(func(get<0>())));
         }
+
+        /**
+         * @brief 使用可调用对象将Result<T, E>映射为Result<U, E>，在Ok时调用，而Err时什么都不做
+         *
+         * 在Ok状态下时，T&&会被移动传入并将返回值作为构造Result<U, E>的U类型的值
+         * 在Err状态下，仅仅是移动构造E的值
+         *
+         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         *
+         * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
+         *
+         * @example
+         * ```
+         * C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
+         * auto dst = src.map_into<std::vector<int>>([](auto&& v) {
+         *         for (auto&& e : v) {
+         *             e *= 2;
+         *         }
+         *         return v;
+         *     });
+         * std::vector<int> check{ 2, 4, 6, 8 };
+         * assert(dst.get<0>() == check);
+         * assert(src.get<0>().size() == 0);
+         * ```
+         */
+        template<typename U, typename F>
+            requires (requires (F f, T t) {
+                { f(std::move(t)) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<E>)
+        [[nodiscard]] constexpr Result<U, E> map_into(F func)
+            noexcept(std::is_nothrow_constructible_v<U, decltype(func(std::declval<T>()))> &&
+                     std::is_nothrow_move_constructible_v<E>) {
+            if (is_err()) return Result<U, E>(std::in_place_type<E>, std::move(get<1>()));
+            return Result<U, E>(std::in_place_type<U>, std::move(func(std::move(get<0>()))));
+        }
+
 
 
     private:
