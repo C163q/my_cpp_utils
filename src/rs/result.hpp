@@ -4,6 +4,7 @@
  */
 
 #include<concepts>
+#include<functional>
 #include<optional>
 #include<type_traits>
 #include<utility>
@@ -123,11 +124,11 @@ namespace C163q {
          */
         template<typename F>
             requires requires (F f, const T& t) {
-                { f(t) } -> std::same_as<bool>;
+                { std::invoke(f, t) } -> std::same_as<bool>;
             }
-        [[nodiscard]] constexpr bool is_ok_and(F f)
-            const noexcept(noexcept(f(std::declval<T>()))) {
-            return !m_data.index() && f(std::get<T>(m_data));
+        [[nodiscard]] constexpr bool is_ok_and(F&& f)
+            const noexcept(std::is_nothrow_invocable_v<F, T>) {
+            return !m_data.index() && std::invoke(std::forward<F>(f), std::get<T>(m_data));
         }
 
         /**
@@ -171,12 +172,12 @@ namespace C163q {
          * ```
          */
         template<typename F>
-            requires requires (F f, const E& t) {
-                { f(t) } -> std::same_as<bool>;
+            requires requires (F f, const E& e) {
+                { std::invoke(f, e) } -> std::same_as<bool>;
             }
-        [[nodiscard]] constexpr bool is_err_and(F f)
+        [[nodiscard]] constexpr bool is_err_and(F&& f)
             const noexcept(noexcept(f(std::declval<E>()))) {
-            return !!m_data.index() && f(std::get<E>(m_data));
+            return !!m_data.index() && std::invoke(std::forward<F>(f), std::get<E>(m_data));
         }
 
         /**
@@ -308,13 +309,44 @@ namespace C163q {
          */
         template<typename U, typename F>
             requires (requires (F f, const T& t) {
-                { f(t) } -> std::convertible_to<U>;
+                { std::invoke(f, t) } -> std::convertible_to<U>;
             } && std::is_copy_constructible_v<E>)
-        [[nodiscard]] constexpr Result<U, E> map(F func) const
-            noexcept(std::is_nothrow_constructible_v<U, decltype(func(std::declval<T>()))> &&
-                     std::is_nothrow_copy_constructible_v<E>) {
+        [[nodiscard]] constexpr Result<U, E> map(F&& func) const
+            noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
+                     std::is_nothrow_copy_constructible_v<E> && std::is_nothrow_invocable_v<F, const T&>) {
             if (is_err()) return Result<U, E>(std::in_place_type<E>, get<1>());
-            return Result<U, E>(std::in_place_type<U>, std::move(func(get<0>())));
+            return Result<U, E>(std::in_place_type<U>, std::move(std::invoke(std::forward<F>(func), get<0>())));
+        }
+
+        /**
+         * @brief 如果处于Err状态，返回默认值，否则用保有值调用可调用对象
+         *
+         * @param default_value 当处于Err状态时返回的值
+         * @param func          当处于Ok状态时所调用的可调用对象，参数类型为const T&，返回值类型为U
+         *
+         * @tparam U 返回值类型，default_value应该为该类型，func的返回值应当可以转换为该类型
+         * @tparam F 可调用对象的类型
+         *
+         * @return 类型为U，在Err状态下返回default_value，否则使用保有值调用可调用对象，并返回
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<std::exception, std::string>("foo");
+         * assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);
+         *
+         * auto y = C163q::Err<std::string, const char*>("bar");
+         * assert(y.map(42, [](auto&& str) { return str.size(); }) == 42);
+         * ```
+         */
+        template<typename U, typename F>
+            requires requires (F f, const T& t) {
+                { std::invoke(f, t) } -> std::convertible_to<U>;
+            }
+        [[nodiscard]] constexpr U map(U default_value, F&& func) const
+            noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
+                     std::is_nothrow_move_constructible_v<U> && std::is_nothrow_invocable_v<F, const T&>) {
+            if (is_err()) return default_value;
+            return std::invoke(std::forward<F>(func), get<0>());
         }
 
         /**
@@ -382,7 +414,7 @@ namespace C163q {
         requires std::move_constructible<std::decay_t<T>>
     Result<std::decay_t<T>, std::decay_t<E>> Ok(T&& value)
         noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, T>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::forward<T>(value));
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<T>>, std::forward<T>(value));
     }
 
     /**
@@ -408,7 +440,7 @@ namespace C163q {
         requires std::constructible_from<std::decay_t<T>, Args...>
     Result<std::decay_t<T>, std::decay_t<E>> Ok(Args&&... args)
         noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, Args...>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<T>, std::forward<Args>(args)...);
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<T>>, std::forward<Args>(args)...);
     }
 
     /**
@@ -432,7 +464,7 @@ namespace C163q {
         requires std::move_constructible<std::decay_t<E>>
     Result<std::decay_t<T>, std::decay_t<E>> Err(E&& err)
         noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, E>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::forward<E>(err));
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<E>>, std::forward<E>(err));
     }
 
     /**
@@ -456,7 +488,7 @@ namespace C163q {
         requires std::constructible_from<std::decay_t<E>, Args...>
     Result<std::decay_t<T>, std::decay_t<E>> Err(Args&&... args)
         noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, Args...>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<E>, std::forward<Args>(args)...);
+        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<E>>, std::forward<Args>(args)...);
     }
 
 }

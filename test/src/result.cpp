@@ -9,6 +9,15 @@
 #include<tuple>
 #include<vector>
 
+class noise_type {
+public:
+    noise_type() { std::println("default construct!"); }
+    noise_type(const noise_type&) { std::println("copy construct!"); }
+    noise_type(noise_type&&) { std::println("move construct!"); }
+    noise_type& operator=(const noise_type&) { std::println("copy assign!"); return *this; }
+    noise_type& operator=(noise_type&&) { std::println("move assign!"); return *this; }
+};
+
 int main() {
     {
         auto x = C163q::Ok<const char*>(-3);
@@ -75,7 +84,7 @@ int main() {
             } else {
                 ret.push_back(0);
             }
-            static_assert(noexcept(res.map<double>([](auto val) { return double(val); })));
+            static_assert(noexcept(res.map<double>([](auto val) noexcept { return double(val); })));
         }
         std::vector<double> check{ 1 * 1.5, 2 * 1.5, 5 * 1.5, 0, 10 * 1.5, 20 * 1.5 };
         assert(ret == check);
@@ -92,7 +101,13 @@ int main() {
         assert(dst.get<0>() == check);
         assert(src.get<0>().size() == 0);
     }
+    {
+        auto x = C163q::Ok<std::exception, std::string>("foo");
+        assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);
 
+        auto y = C163q::Err<std::string, const char*>("bar");
+        assert(y.map(42, [](auto&& str) { return str.size(); }) == 42);
+    }
     std::println("PASS!");
 }
 
