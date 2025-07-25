@@ -43,6 +43,8 @@ namespace C163q {
          * 要求T至少是可移动构造的，这会使Result处于Ok状态。
          *
          * @param value 要存储的值
+         *
+         * @tparam U 构造T时所使用的类型
          */
         template<typename U>
             requires std::constructible_from<T, U>
@@ -55,6 +57,8 @@ namespace C163q {
          * 要求E至少是可移动构造的，这会使Result处于Err状态。
          *
          * @param value 要存储的异常
+         *
+         * @tparam F 构造E时所使用的类型
          */
         template<typename F>
             requires std::constructible_from<E, F>
@@ -108,6 +112,8 @@ namespace C163q {
          * @param f 参数为const T&且返回bool的谓词，
          *          Result内保有的数据的常引用会被传入。
          *
+         * @tparam F 可调用对象的类型，应当接收const T&并返回bool
+         *
          * @return 当Result处于Ok状态且其保有满足谓词f的值时返回true，否则false
          *
          * @example
@@ -154,6 +160,8 @@ namespace C163q {
          *
          * @param f 参数为const E&且返回bool的谓词，
          *          Result内保有的数据的常引用会被传入。
+         *
+         * @tparam F 可调用对象的类型，应当接收const E&并返回bool
          *
          * @return 当Result处于Err状态且其保有满足谓词f的值时返回true，否则false
          *
@@ -288,6 +296,9 @@ namespace C163q {
          *
          * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
          *
+         * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
+         * @tparam F 可调用对象的类型
+         *
          * @example
          * ```
          * auto Ok = [](int val) { return C163q::Ok<const char*>(val); };
@@ -358,7 +369,10 @@ namespace C163q {
          * @warning 不同于map()方法，map_into()调用后原始值被移动
          *
          * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
-         *
+         * 
+         * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
+         * @tparam F 可调用对象的类型                                                                                             @example
+         * 
          * @example
          * ```
          * C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
@@ -398,6 +412,7 @@ namespace C163q {
      *
      * @tparam E 构造的Result的错误类型std::decay_t<E>
      * @tparam T 构造的Result的存储数据的类型std::decay_t<T>
+     *
      * @param value 构造Result的Ok状态的值
      *
      * @return 构造的Result
@@ -424,6 +439,7 @@ namespace C163q {
      *
      * @tparam E 构造的Result的错误类型
      * @tparam T 构造的Result的存储数据的类型
+     *
      * @param args 构造Result的Ok状态的参数
      *
      * @return 构造的Result
@@ -450,6 +466,7 @@ namespace C163q {
      *
      * @tparam T 构造的Result的存储数据的类型
      * @tparam E 构造的Result的错误类型
+     *
      * @param err 构造Result的Err状态的值
      *
      * @return 构造的Result
@@ -474,6 +491,7 @@ namespace C163q {
      *
      * @tparam T 构造的Result的存储数据的类型
      * @tparam E 构造的Result的错误类型
+     *
      * @param args 构造Result的Err状态的参数
      *
      * @return 构造的Result
