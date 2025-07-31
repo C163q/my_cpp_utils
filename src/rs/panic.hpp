@@ -7,6 +7,9 @@
  * @since Jul 17, 2025
  */
 
+#ifndef C163Q_MY_CPP_UTILS_RS_PANIC_HPP
+#define C163Q_MY_CPP_UTILS_RS_PANIC_HPP
+
 #include"../core/config.hpp"
 #ifndef MY_CXX20
     static_assert(false, "Require C++20!");
@@ -48,3 +51,4 @@ namespace C163q {
 #define panic(message) do { ::C163q::call_panic_(message); } while(0)
 
 
+#endif // !C163Q_MY_CPP_UTILS_RS_PANIC_HPP

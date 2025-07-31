@@ -1,4 +1,4 @@
-/**
+/*!
  * @file format/span.hpp
  * @brief 为std::span类提供std::formatter的实现
  *
@@ -6,6 +6,9 @@
  *
  * @since Jul 10, 2025
  */
+
+#ifndef C163Q_MY_CPP_UTILS_FORMAT_SPAN_HPP
+#define C163Q_MY_CPP_UTILS_FORMAT_SPAN_HPP
 
 #include"../core/config.hpp"
 #ifndef MY_CXX20
@@ -182,3 +185,4 @@ private:
 };
 
 
+#endif // !C163Q_MY_CPP_UTILS_FORMAT_SPAN_HPP

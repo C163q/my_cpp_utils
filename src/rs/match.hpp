@@ -1,4 +1,4 @@
-/**
+/*!
  * @file rs/match.hpp
  * @brief 在C++中实现类似rust中match关键字的效果
  * 
@@ -7,7 +7,13 @@
  * @since Jul 12, 2025
  */
 
+#ifndef C163Q_MY_CPP_UTILS_RS_MATCH_HPP
+#define C163Q_MY_CPP_UTILS_RS_MATCH_HPP
+
 #include"../core/config.hpp"
+#ifndef MY_CXX17
+    static_assert(false, "Require C++17!");
+#endif
 
 #include<utility>
 #include<variant>
@@ -79,6 +85,4 @@ namespace C163q {
 }
 
 
-
-
-
+#endif // !C163Q_MY_CPP_UTILS_RS_MATCH_HPP

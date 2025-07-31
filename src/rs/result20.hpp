@@ -1,11 +1,14 @@
-/**
- * @file rs/result.hpp
+/*!
+ * @file rs/result20.hpp
  * @brief 在C++中实现rust当中的Result类
  *
- * 至少需要C++23
+ * 至少需要C++20
  *
  * @since Jul 17, 2025
  */
+
+#ifndef C163Q_MY_CPP_UTILS_RS_RESULT20_HPP
+#define C163Q_MY_CPP_UTILS_RS_RESULT20_HPP
 
 #include"../core/config.hpp"
 #ifndef MY_CXX20
@@ -603,3 +606,5 @@ namespace std {
 
 }
 
+
+#endif // !C163Q_MY_CPP_UTILS_RS_RESULT20_HPP

@@ -1,4 +1,4 @@
-#include"../../src/rs/result.hpp"
+#include"../../src/rs/result20.hpp"
 #include<cassert>
 #include<exception>
 #include<initializer_list>
