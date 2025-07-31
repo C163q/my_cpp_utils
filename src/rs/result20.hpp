@@ -11,6 +11,7 @@
 #define C163Q_MY_CPP_UTILS_RS_RESULT20_HPP
 
 #include"../core/config.hpp"
+#include <algorithm>
 #ifndef MY_CXX20
     static_assert(false, "Require C++20!")
 #endif
@@ -306,7 +307,7 @@ namespace C163q {
          * 在Ok状态下时，const T&会被传入并将返回值作为构造Result<U, E>的U类型的值
          * 在Err状态下，仅仅是复制构造E的值
          *
-         * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
+         * @param func 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
          *
          * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
          * @tparam F 可调用对象的类型
@@ -373,6 +374,79 @@ namespace C163q {
         }
 
         /**
+         * @brief 如果处于Err状态，用错误值调用callback，否则用保有值调用func
+         *
+         * @param fallback 当处于Err状态时，所调用的可调用对象，参数类型为const E&，返回值类型可以转换为U
+         * @param func     当处于Ok状态时，所调用的可调用对象，参数类型为const T&，返回值类型可以转换为U
+         *
+         * @tparma U 返回值类型，fallback和func的返回值应当可以转换为该类型
+         * @tparam D 可调用对象fallback的类型
+         * @tparam F 可调用对象func的类型
+         *
+         * @return 类型为U。在Err状态下，是使用错误值调用callback得到的；
+         *         在Ok状态下，是使用保有值调用func得到的。
+         *
+         * @example
+         * ```
+         * size_t k = 21;
+         * 
+         * auto x = C163q::Ok<std::exception, std::string_view>("foo");
+         * auto res = x.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * assert(res == 3);
+         *
+         * auto y = C163q::Err<std::string_view>("bar");
+         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * assert(res == 42);
+         * ```
+         */
+        template<typename U, typename D, typename F>
+            requires (requires (D f0, F f1, const E& e, const T& t) {
+                { std::invoke(f0, e) } -> std::convertible_to<U>;
+                { std::invoke(f1, t) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<U>)
+        [[nodiscard]] constexpr U map(D&& fallback, F&& func) const
+            noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<D, const E&>> &&
+                     std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
+                     std::is_nothrow_move_constructible_v<U> && std::is_nothrow_invocable_v<D, const E&> &&
+                     std::is_nothrow_invocable_v<F, const T&>) {
+            if (is_err()) return std::invoke(std::forward<D>(fallback), get<1>());
+            return std::invoke(std::forward<F>(func), get<0>());
+        }
+
+        /**
+         * @brief 使用可调用对象将Result<T, E>映射为Result<T, F>，在Err时调用，而Ok时什么都不做
+         *
+         * 在Ok状态下，仅仅是复制构造T的值
+         * 在Err状态下时，const E&会被传入并将返回值作为构造Result<T, F>的F类型的值
+         *
+         * @param op 用于映射的可调用对象，接收一个const E&并返回一个可以构造为F的类型
+         *
+         * @tparam F 返回的Result中，处于Err状态时保有的值的类型，op的返回值应该能够转换为该类型
+         * @tparam O 可调用对象的类型
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(1);
+         * auto res_x = x.map_err<void*>([] (auto e) { return (void*)e; });
+         * assert(res_x.get<0>() == 1);
+         *
+         * auto y = C163q::Err<const char*>(12);
+         * auto res_y = y.map_err<std::string>([] (auto e) { return std::format("error code: {}", e); });
+         * assert(res_y.get<1>() == "error code: 12");
+         * ```
+         */
+        template<typename F, typename O>
+            requires (requires (O op, const E& e) {
+                { std::invoke(op, e) } -> std::convertible_to<F>;
+            } && std::is_copy_constructible_v<T>)
+        [[nodiscard]] constexpr Result<T, F> map_err(O&& op) const
+            noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, const E&>> &&
+                     std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_invocable_v<O, const E&>) {
+            if (is_ok()) return Result<T, F>(std::in_place_type<T>, get<0>());
+            return Result<T, F>(std::in_place_type<F>, std::move(std::invoke(std::forward<O>(op), get<1>())));
+        }
+
+        /**
          * @brief 使用可调用对象将Result<T, E>映射为Result<U, E>，在Ok时调用，而Err时什么都不做
          *
          * 在Ok状态下时，T&&会被移动传入并将返回值作为构造Result<U, E>的U类型的值
@@ -380,7 +454,7 @@ namespace C163q {
          *
          * @warning 不同于map()方法，map_into()调用后原始值被移动
          *
-         * @param 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
+         * @param 用于映射的可调用对象，接收一个T并返回一个可以构造为U的类型
          * 
          * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
          * @tparam F 可调用对象的类型                                                                                             @example
@@ -405,7 +479,8 @@ namespace C163q {
             } && std::is_move_constructible_v<E> && std::is_move_constructible_v<T>)
         [[nodiscard]] constexpr Result<U, E> map_into(F&& func)
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
-                     std::is_nothrow_move_constructible_v<E> && std::is_nothrow_invocable_v<F, T>) {
+                     std::is_nothrow_move_constructible_v<E> && std::is_nothrow_move_constructible_v<T> &&
+                     std::is_nothrow_invocable_v<F, T>) {
             if (is_err()) return Result<U, E>(std::in_place_type<E>, std::move(get<1>()));
             return Result<U, E>(std::in_place_type<U>, std::move(std::invoke(
                             std::forward<F>(func), std::move(get<0>()))));
@@ -448,9 +523,94 @@ namespace C163q {
             } && std::is_move_constructible_v<U> && std::is_move_constructible_v<T>)
         [[nodiscard]] constexpr U map_into(U default_value, F&& func)
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
-                     std::is_nothrow_move_constructible_v<U> && std::is_nothrow_invocable_v<F, T>) {
+                     std::is_nothrow_move_constructible_v<U> && std::is_nothrow_move_constructible_v<T> &&
+                     std::is_nothrow_invocable_v<F, T>) {
             if (is_err()) return default_value;
             return std::invoke(std::forward<F>(func), std::move(get<0>()));
+        }
+
+        /**
+         * @brief 如果处于Err状态，移动错误值调用callback，否则移动保有值调用func
+         *
+         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         *
+         * @param fallback 当处于Err状态时，所调用的可调用对象，参数类型为E，返回值类型可以转换为U
+         * @param func     当处于Ok状态时，所调用的可调用对象，参数类型为T，返回值类型可以转换为U
+         *
+         * @tparma U 返回值类型，fallback和func的返回值应当可以转换为该类型
+         * @tparam D 可调用对象fallback的类型
+         * @tparam F 可调用对象func的类型
+         *
+         * @return 类型为U。在Err状态下，是移动错误值调用callback得到的；
+         *         在Ok状态下，是移动保有值调用func得到的。
+         *
+         * @example
+         * ```
+         * size_t k = 21;
+         * 
+         * auto x = C163q::Ok<std::exception, std::string>("foo");
+         * auto res = x.map_into<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * assert(res == 3);
+         * assert(x.get<0>().size() == 0);
+         *
+         * auto y = C163q::Err<std::string_view>("bar");
+         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * assert(res == 42);
+         * ```
+         */
+        template<typename U, typename D, typename F>
+            requires (requires (D f0, F f1, E e, T t) {
+                { std::invoke(f0, std::move(e)) } -> std::convertible_to<U>;
+                { std::invoke(f1, std::move(t)) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<U> && std::is_move_constructible_v<T> &&
+                 std::is_move_constructible_v<E>)
+        [[nodiscard]] constexpr U map_into(D&& fallback, F&& func)
+            noexcept (std::is_nothrow_constructible_v<U, std::invoke_result_t<D, E>> &&
+                      std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
+                      std::is_nothrow_move_constructible_v<U> && std::is_nothrow_move_constructible_v<T> &&
+                      std::is_nothrow_move_constructible_v<E> && std::is_nothrow_invocable_v<D, E> &&
+                      std::is_nothrow_invocable_v<F, T>) {
+            if (is_err()) return std::invoke(std::forward<D>(fallback), std::move(get<1>()));
+            return std::invoke(std::forward<F>(func), std::move(get<0>()));
+        }
+
+        /**
+         * @brief 使用可调用对象将Result<T, E>映射为Result<T, F>，在Err时调用，而Ok时什么都不做
+         *
+         * 在Ok状态下，仅仅是移动构造T的值
+         * 在Err状态下时，E&&会被移动传入并将返回值作为构造Result<T, F>的F类型的值
+         *
+         * @warning 不同于map_err()方法，map_err_into()调用后原始值被移动
+         *
+         * @param op 用于映射的可调用对象，接收一个E并返回一个可以构造为F的类型
+         *
+         * @tparam F 返回的Result中，处于Err状态时保有的值的类型，op的返回值应该能够转换为该类型
+         * @tparam O 可调用对象的类型
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(std::vector{ 1 });
+         * auto res_x = x.map_err_into<void*>([](auto e) { return (void*)e; });
+         * assert(res_x.get<0>() == std::vector{ 1 });
+         * assert(x.get<0>().size() == 0);
+         *
+         * auto y = C163q::Err<int, std::string>("out of range");
+         * auto res_y = y.map_err_into<std::string>([](std::string e) { return std::format("error message: {}", e); });
+         * assert(res_y.get<1>() == "error message: out of range");
+         * assert(y.get<1>().size() == 0);
+         * ```
+         */
+        template<typename F, typename O>
+            requires (requires (O op, E e) {
+                { std::invoke(op, std::move(e)) } -> std::convertible_to<F>;
+            } && std::is_move_constructible_v<T> && std::is_move_constructible_v<E>)
+        [[nodiscard]] constexpr Result<T, F> map_err_into(O&& op)
+            noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, E>> &&
+                     std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E> &&
+                     std::is_nothrow_invocable_v<O, E>) {
+            if (is_ok()) return Result<T, F>(std::in_place_type<T>, std::move(get<0>()));
+            return Result<T, F>(std::in_place_type<F>, std::move(std::invoke(
+                            std::forward<O>(op), std::move(get<1>()))));
         }
 
     private:

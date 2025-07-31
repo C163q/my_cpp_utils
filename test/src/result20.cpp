@@ -1,6 +1,8 @@
 #include"../../src/rs/result20.hpp"
 #include<cassert>
+#include<cstddef>
 #include<exception>
+#include<format>
 #include<initializer_list>
 #include<iterator>
 #include<iostream>
@@ -117,6 +119,49 @@ int main() {
             });
         assert(y == "Error");
         assert(x.get<1>() == "bar");
+    }
+    {
+        size_t k = 21;
+        
+        auto x = C163q::Ok<std::exception, std::string_view>("foo");
+        auto res = x.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        assert(res == 3);
+
+        auto y = C163q::Err<std::string_view>("bar");
+        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        assert(res == 42);
+    }
+    {
+        size_t k = 21;
+        
+        auto x = C163q::Ok<std::exception, std::string>("foo");
+        auto res = x.map_into<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        assert(res == 3);
+        assert(x.get<0>().size() == 0);
+
+        auto y = C163q::Err<std::string_view>("bar");
+        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        assert(res == 42);
+    }
+    {
+        auto x = C163q::Ok<const char*>(1);
+        auto res_x = x.map_err<void*>([](auto e) { return (void*)e; });
+        assert(res_x.get<0>() == 1);
+
+        auto y = C163q::Err<const char*>(12);
+        auto res_y = y.map_err<std::string>([](auto e) { return std::format("error code: {}", e); });
+        assert(res_y.get<1>() == "error code: 12");
+    }
+    {
+        auto x = C163q::Ok<const char*>(std::vector{ 1 });
+        auto res_x = x.map_err_into<void*>([](auto e) { return (void*)e; });
+        assert(res_x.get<0>() == std::vector{ 1 });
+        assert(x.get<0>().size() == 0);
+
+        auto y = C163q::Err<int, std::string>("out of range");
+        auto res_y = y.map_err_into<std::string>([](std::string e) { return std::format("error message: {}", e); });
+        assert(res_y.get<1>() == "error message: out of range");
+        assert(y.get<1>().size() == 0);
     }
     std::cout << "PASS!" << std::endl;
 }
