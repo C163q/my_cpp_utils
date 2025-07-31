@@ -1,7 +1,16 @@
-/**
+/*!
  * @file rs/panic.hpp
  * 在C++中实现rust中panic!宏的效果
+ *
+ * 至少需要C++20
+ *
+ * @since Jul 17, 2025
  */
+
+#include"../core/config.hpp"
+#ifndef MY_CXX20
+    static_assert(false, "Require C++20!");
+#endif
 
 #include<string_view>
 #include<source_location>
@@ -10,6 +19,8 @@ namespace C163q {
 
     /**
      * @brief 决定在panic中是否显示栈回溯，默认为false
+     *
+     * 仅在启用C++23标准时可用！
      */
     extern bool enable_traceback;
 

@@ -1,7 +1,13 @@
 /**
  * @file rs/match.hpp
  * @brief 在C++中实现类似rust中match关键字的效果
+ * 
+ * 至少需要C++17
+ *
+ * @since Jul 12, 2025
  */
+
+#include"../core/config.hpp"
 
 #include<utility>
 #include<variant>

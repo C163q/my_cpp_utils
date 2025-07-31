@@ -1,7 +1,16 @@
 /**
  * @file rs/result.hpp
  * @brief 在C++中实现rust当中的Result类
+ *
+ * 至少需要C++23
+ *
+ * @since Jul 17, 2025
  */
+
+#include"../core/config.hpp"
+#ifndef MY_CXX20
+    static_assert(false, "Require C++20!")
+#endif
 
 #include<concepts>
 #include<functional>
@@ -350,9 +359,9 @@ namespace C163q {
          * ```
          */
         template<typename U, typename F>
-            requires requires (F f, const T& t) {
+            requires (requires (F f, const T& t) {
                 { std::invoke(f, t) } -> std::convertible_to<U>;
-            }
+            } && std::is_move_constructible_v<U>)
         [[nodiscard]] constexpr U map(U default_value, F&& func) const
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
                      std::is_nothrow_move_constructible_v<U> && std::is_nothrow_invocable_v<F, const T&>) {
@@ -389,16 +398,57 @@ namespace C163q {
          */
         template<typename U, typename F>
             requires (requires (F f, T t) {
-                { f(std::move(t)) } -> std::convertible_to<U>;
-            } && std::is_move_constructible_v<E>)
-        [[nodiscard]] constexpr Result<U, E> map_into(F func)
-            noexcept(std::is_nothrow_constructible_v<U, decltype(func(std::declval<T>()))> &&
-                     std::is_nothrow_move_constructible_v<E>) {
+                { std::invoke(f, std::move(t)) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<E> && std::is_move_constructible_v<T>)
+        [[nodiscard]] constexpr Result<U, E> map_into(F&& func)
+            noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
+                     std::is_nothrow_move_constructible_v<E> && std::is_nothrow_invocable_v<F, T>) {
             if (is_err()) return Result<U, E>(std::in_place_type<E>, std::move(get<1>()));
-            return Result<U, E>(std::in_place_type<U>, std::move(func(std::move(get<0>()))));
+            return Result<U, E>(std::in_place_type<U>, std::move(std::invoke(
+                            std::forward<F>(func), std::move(get<0>()))));
         }
 
-
+        /**
+         * @brief 如果处于Err状态，返回默认值，否则移动保有值调用可调用对象
+         *
+         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         *
+         * @param default_value 当处于Err状态时返回的值
+         * @param func          当处于Ok状态时所调用的可调用对象，参数类型为T，返回值类型为U
+         *
+         * @tparam U 返回值类型，default_value应该为该类型，func的返回值应当可以转换为该类型
+         * @tparam F 可调用对象的类型
+         *
+         * @return 类型为U，在Err状态下返回default_value，否则移动保有值调用可调用对象，并返回
+         *
+         * @example
+         * ```
+         * C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
+         * auto dst = src.map_into<int>(0, [](std::vector<int> v) {
+         *         return std::accumulate(std::begin(v), std::end(v), 0);
+         *     });
+         * assert(dst == 10);
+         * assert(src.get<0>().size() == 0);
+         *
+         * C163q::Result<const char*, std::string> x(std::in_place_type<std::string>, "bar");
+         * auto y = x.map_into<std::string>("Error", [](std::string v) {
+         *         v.push_back('z');
+         *         return v;
+         *     });
+         * assert(y == "Error");
+         * assert(x.get<1>() == "bar");
+         * ```
+         */
+        template<typename U, typename F>
+            requires (requires (F f, T t) {
+                { std::invoke(f, std::move(t)) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<U> && std::is_move_constructible_v<T>)
+        [[nodiscard]] constexpr U map_into(U default_value, F&& func)
+            noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
+                     std::is_nothrow_move_constructible_v<U> && std::is_nothrow_invocable_v<F, T>) {
+            if (is_err()) return default_value;
+            return std::invoke(std::forward<F>(func), std::move(get<0>()));
+        }
 
     private:
         std::variant<T, E> m_data;

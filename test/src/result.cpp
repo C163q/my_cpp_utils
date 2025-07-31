@@ -2,21 +2,15 @@
 #include<cassert>
 #include<exception>
 #include<initializer_list>
+#include<iterator>
+#include<iostream>
+#include<numeric>
 #include<optional>
-#include<print>
 #include<stdexcept>
+#include<string>
 #include<string_view>
 #include<tuple>
 #include<vector>
-
-class noise_type {
-public:
-    noise_type() { std::println("default construct!"); }
-    noise_type(const noise_type&) { std::println("copy construct!"); }
-    noise_type(noise_type&&) { std::println("move construct!"); }
-    noise_type& operator=(const noise_type&) { std::println("copy assign!"); return *this; }
-    noise_type& operator=(noise_type&&) { std::println("move assign!"); return *this; }
-};
 
 int main() {
     {
@@ -108,6 +102,22 @@ int main() {
         auto y = C163q::Err<std::string, const char*>("bar");
         assert(y.map(42, [](auto&& str) { return str.size(); }) == 42);
     }
-    std::println("PASS!");
+    {
+        C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
+        auto dst = src.map_into<int>(0, [](std::vector<int> v) {
+                return std::accumulate(std::begin(v), std::end(v), 0);
+            });
+        assert(dst == 10);
+        assert(src.get<0>().size() == 0);
+
+        C163q::Result<const char*, std::string> x(std::in_place_type<std::string>, "bar");
+        auto y = x.map_into<std::string>("Error", [](std::string v) {
+                v.push_back('z');
+                return v;
+            });
+        assert(y == "Error");
+        assert(x.get<1>() == "bar");
+    }
+    std::cout << "PASS!" << std::endl;
 }
 

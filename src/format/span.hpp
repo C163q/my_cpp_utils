@@ -1,7 +1,16 @@
 /**
  * @file format/span.hpp
  * @brief 为std::span类提供std::formatter的实现
+ *
+ * 至少需要C++20
+ *
+ * @since Jul 10, 2025
  */
+
+#include"../core/config.hpp"
+#ifndef MY_CXX20
+    static_assert(false, "Require C++20!");
+#endif
 
 #include<algorithm>
 #include<cstddef>
