@@ -13,7 +13,7 @@
 #include"../core/config.hpp"
 #ifndef MY_CXX20
     static_assert(false, "Require C++20!");
-#endif
+#else
 
 #include<algorithm>
 #include<cstddef>
@@ -185,4 +185,5 @@ private:
 };
 
 
+#endif // MY_CXX20
 #endif // !C163Q_MY_CPP_UTILS_FORMAT_SPAN_HPP

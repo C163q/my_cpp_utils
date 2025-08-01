@@ -12,8 +12,8 @@
 
 #include"../core/config.hpp"
 #ifndef MY_CXX20
-    static_assert(false, "Require C++20!")
-#endif
+    static_assert(false, "Require C++20!");
+#else
 
 #include<algorithm>
 #include<format>
@@ -1003,4 +1003,5 @@ namespace std {
 }
 
 
+#endif // MY_CXX20
 #endif // !C163Q_MY_CPP_UTILS_RS_RESULT20_HPP

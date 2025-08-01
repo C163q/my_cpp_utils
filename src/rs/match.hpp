@@ -13,7 +13,7 @@
 #include"../core/config.hpp"
 #ifndef MY_CXX17
     static_assert(false, "Require C++17!");
-#endif
+#else
 
 #include<utility>
 #include<variant>
@@ -79,10 +79,11 @@ namespace C163q {
      */
     template <typename ...T, typename ...F>
     constexpr auto match(const std::variant<T...>& v, F&&... func) {
-        return std::visit(overload(std::forward<F>(func)...), v);
+        return std::visit(overload{ std::forward<F>(func)... }, v);
     }
 
 }
 
 
+#endif // MY_CXX17
 #endif // !C163Q_MY_CPP_UTILS_RS_MATCH_HPP
