@@ -1,5 +1,6 @@
 #include"../../src/rs/result20.hpp"
 #include<cassert>
+#include<chrono>
 #include<cstddef>
 #include<exception>
 #include<format>
@@ -12,6 +13,8 @@
 #include<string>
 #include<string_view>
 #include<tuple>
+#include<type_traits>
+#include <utility>
 #include<vector>
 
 int main() {
@@ -162,6 +165,52 @@ int main() {
         auto res_y = y.map_err_into<std::string>([](std::string e) { return std::format("error message: {}", e); });
         assert(res_y.get<1>() == "error message: out of range");
         assert(y.get<1>().size() == 0);
+    }
+    {
+        auto x = C163q::Ok<const char*>(1);
+        int val = x.expect("Error");
+        assert(val == 1);
+
+        // auto y = C163q::Err<int>("code");
+        // val = y.expect("Error");    // panics with `Error: code`
+    }
+    {
+        auto x = C163q::Ok<const char*>(1);
+        int val = x.unwrap();
+        assert(val == 1);
+
+        // auto y = C163q::Err<int>("code");
+        // val = y.unwrap();   // panics with `code`
+    }
+    {
+        std::string s1 = "123456";
+        std::string s2 = "foo";
+        auto f = [](const std::string& s) {
+            int(*f)(const std::string&, size_t*, int) = std::stoi;
+            return f(s, nullptr, 10);
+        };
+
+        auto val1 = C163q::result_helper<std::exception>::invoke(f, s1).unwrap_or_default();
+        assert(val1 == 123456);
+
+        auto val2 = C163q::result_helper<std::exception>::invoke(f, s2).unwrap_or_default();
+        assert(val2 == 0);
+    }
+    {
+        auto x = C163q::Err<const char*>("likely panic");
+        const char* val = x.expect_err("Error");
+        assert(std::string_view("likely panic") == val);
+
+        // auto y = C163q::Ok<const char*>(std::chrono::day(7));
+        // val = y.expect_err("Error");    // panics with `Error: 07`
+    }
+    {
+        auto x = C163q::Err<const char*>("likely panic");
+        std::string_view val = x.unwrap_err();
+        assert(val == "likely panic");
+
+        // auto y = C163q::Ok<const char*>(42);
+        // val = y.unwrap_err();   // panics with `42`
     }
     std::cout << "PASS!" << std::endl;
 }

@@ -11,12 +11,15 @@
 #define C163Q_MY_CPP_UTILS_RS_RESULT20_HPP
 
 #include"../core/config.hpp"
-#include <algorithm>
 #ifndef MY_CXX20
     static_assert(false, "Require C++20!")
 #endif
 
+#include<algorithm>
+#include<format>
+#include<string_view>
 #include<concepts>
+#include<cstddef>
 #include<functional>
 #include<optional>
 #include<type_traits>
@@ -38,8 +41,7 @@ namespace C163q {
      *
      */
     template<typename T, typename E>
-        requires (std::is_object_v<T> && std::is_object_v<E> &&
-                 !std::is_same_v<std::decay_t<T>, std::decay_t<E>>)
+        requires (std::is_object_v<T> && std::is_object_v<E>)
     class Result {
 
     public:
@@ -87,11 +89,17 @@ namespace C163q {
          * @tparma Args 参数的类型
          * @param args 用于构造U的参数
          */
-        template<typename U ,typename ...Args>
-            requires (std::is_same_v<T, U> || std::is_same_v<E, U>) &&
-                      std::is_constructible_v<U, Args...>
+        template<typename U, typename ...Args>
+            requires ((std::is_same_v<T, U> || std::is_same_v<E, U>) &&
+                      std::is_constructible_v<U, Args...> && !std::is_same_v<T, E>)
         constexpr explicit Result(std::in_place_type_t<U>, Args&&... args)
             : m_data(std::in_place_type<U>, std::forward<Args>(args)...) {}
+
+        template<size_t I, typename ...Args>
+            requires ((I == 0 || I == 1) &&
+                    std::is_constructible_v<std::conditional_t<I == 0, T, E>, Args...>)
+        constexpr explicit Result(std::in_place_index_t<I>, Args&&... args)
+            : m_data(std::in_place_index<I>, std::forward<Args>(args)...) {}
 
         constexpr Result(const Result&) = default;
         constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<T> &&
@@ -147,7 +155,7 @@ namespace C163q {
             }
         [[nodiscard]] constexpr bool is_ok_and(F&& f)
             const noexcept(std::is_nothrow_invocable_v<F, T>) {
-            return !m_data.index() && std::invoke(std::forward<F>(f), std::get<T>(m_data));
+            return !m_data.index() && std::invoke(std::forward<F>(f), std::get<0>(m_data));
         }
 
         /**
@@ -198,7 +206,7 @@ namespace C163q {
             }
         [[nodiscard]] constexpr bool is_err_and(F&& f)
             const noexcept(noexcept(f(std::declval<E>()))) {
-            return !!m_data.index() && std::invoke(std::forward<F>(f), std::get<E>(m_data));
+            return !!m_data.index() && std::invoke(std::forward<F>(f), std::get<1>(m_data));
         }
 
         /**
@@ -212,7 +220,7 @@ namespace C163q {
          * @panic 当访问错误的类型或索引时将导致panic
          */
         template<typename U>
-            requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+            requires ((std::is_same_v<U, T> || std::is_same_v<U, E>) && !std::is_same_v<T, E>)
         [[nodiscard]] constexpr U& get() noexcept {
             try {
                 return std::get<U>(m_data);
@@ -222,7 +230,7 @@ namespace C163q {
         }
 
         template<typename U>
-            requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
+            requires ((std::is_same_v<U, T> || std::is_same_v<U, E>) && !std::is_same_v<T, E>)
         [[nodiscard]] constexpr const U& get() const noexcept {
             try {
                 return std::get<U>(m_data);
@@ -338,8 +346,8 @@ namespace C163q {
         [[nodiscard]] constexpr Result<U, E> map(F&& func) const
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
                      std::is_nothrow_copy_constructible_v<E> && std::is_nothrow_invocable_v<F, const T&>) {
-            if (is_err()) return Result<U, E>(std::in_place_type<E>, get<1>());
-            return Result<U, E>(std::in_place_type<U>, std::move(std::invoke(std::forward<F>(func), get<0>())));
+            if (is_err()) return Result<U, E>(std::in_place_index<1>, get<1>());
+            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(std::forward<F>(func), get<0>())));
         }
 
         /**
@@ -442,8 +450,8 @@ namespace C163q {
         [[nodiscard]] constexpr Result<T, F> map_err(O&& op) const
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, const E&>> &&
                      std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_invocable_v<O, const E&>) {
-            if (is_ok()) return Result<T, F>(std::in_place_type<T>, get<0>());
-            return Result<T, F>(std::in_place_type<F>, std::move(std::invoke(std::forward<O>(op), get<1>())));
+            if (is_ok()) return Result<T, F>(std::in_place_index<0>, get<0>());
+            return Result<T, F>(std::in_place_index<1>, std::move(std::invoke(std::forward<O>(op), get<1>())));
         }
 
         /**
@@ -481,8 +489,8 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
                      std::is_nothrow_move_constructible_v<E> && std::is_nothrow_move_constructible_v<T> &&
                      std::is_nothrow_invocable_v<F, T>) {
-            if (is_err()) return Result<U, E>(std::in_place_type<E>, std::move(get<1>()));
-            return Result<U, E>(std::in_place_type<U>, std::move(std::invoke(
+            if (is_err()) return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
+            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(
                             std::forward<F>(func), std::move(get<0>()))));
         }
 
@@ -608,23 +616,208 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, E>> &&
                      std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E> &&
                      std::is_nothrow_invocable_v<O, E>) {
-            if (is_ok()) return Result<T, F>(std::in_place_type<T>, std::move(get<0>()));
-            return Result<T, F>(std::in_place_type<F>, std::move(std::invoke(
+            if (is_ok()) return Result<T, F>(std::in_place_index<0>, std::move(get<0>()));
+            return Result<T, F>(std::in_place_index<1>, std::move(std::invoke(
                             std::forward<O>(op), std::move(get<1>()))));
+        }
+
+        /**
+         * @brief 返回存储的Ok值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @panic 当值为Err时panic，panic信息包括传递的消息和Err的值。
+         *
+         * @param msg panic时的消息。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(1);
+         * int val = x.expect("Error");
+         * assert(val == 1);
+         *
+         * auto y = C163q::Err<int>("code");
+         * val = y.expect("Error");    // panics with `Error: code`
+         * ```
+         */
+        [[nodiscard]] constexpr T expect(const std::string_view& msg) {
+            if (is_ok()) return std::move(get<0>());
+            call_panic_with_TE_uncheck<1>(msg, ": ");
+        }
+
+        [[nodiscard]] constexpr T expect(const std::string_view& msg) const {
+            if (is_ok()) return get<0>();
+            call_panic_with_TE_uncheck<1>(msg, ": ");
+        }
+
+        /**
+         * @brief 返回存储的Ok值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @panic 当值为Err时panic，panic信息为Err的值。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(1);
+         * int val = x.unwrap();
+         * assert(val == 1);
+         *
+         * auto y = C163q::Err<int>("code");
+         * val = y.unwrap();   // panics with `code`
+         * ```
+         */
+        [[nodiscard]] constexpr T unwrap() {
+            if (is_ok()) return std::move(get<0>());
+            call_panic_with_TE_uncheck<1>("", "");
+        }
+
+        [[nodiscard]] constexpr T unwrap() const {
+            if (is_ok()) return get<0>();
+            call_panic_with_TE_uncheck<1>("", "");
+        }
+
+        /**
+         * @brief 返回存储的Ok值。
+         *        当处于Ok状态时，返回存储值；处于Err状态时，返回类型的默认值。要求T可以默认构造。
+         *        处于Ok状态时，非const时移动存储值，const时复制存储值。
+         *
+         * @example
+         * ```
+         * std::string s1 = "123456";
+         * std::string s2 = "foo";
+         * auto f = [](const std::string& s) {
+         *     int(*f)(const std::string&, size_t*, int) = std::stoi;
+         *     return f(s, nullptr, 10);
+         * };
+         *
+         * auto val1 = C163q::result_helper<std::exception>::invoke(f, s1).unwrap_or_default();
+         * assert(val1 == 123456);
+         *
+         * auto val2 = C163q::result_helper<std::exception>::invoke(f, s2).unwrap_or_default();
+         * assert(val2 == 0);
+         * ```
+         */
+        [[nodiscard]] constexpr T unwrap_or_default()
+            noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_default_constructible_v<T>) {
+            if (is_ok()) return std::move(get<0>());
+            return T();
+        }
+
+        [[nodiscard]] constexpr T unwrap_or_default() const
+            noexcept(std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_default_constructible_v<T>) {
+            if (is_ok()) return get<0>();
+            return T();
+        }
+
+        /**
+         * @brief 返回存储的Err值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @panic 当值为Ok时panic，panic信息包括传递的消息和Ok的值。
+         *
+         * @param msg panic时的消息。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Err<const char*>("likely panic");
+         * const char* val = x.expect_err("Error");
+         * assert(std::string_view("likely panic") == val);
+         *
+         * auto y = C163q::Ok<const char*>(std::chrono::day(7));
+         * val = y.expect_err("Error");    // panics with `Error: 07`
+         * ```
+         */
+        [[nodiscard]] constexpr E expect_err(const std::string_view& msg) {
+            if (is_err()) return std::move(get<1>());
+            call_panic_with_TE_uncheck<0>(msg, ": ");
+        }
+
+        [[nodiscard]] constexpr E expect_err(const std::string_view& msg) const {
+            if (is_err()) return get<1>();
+            call_panic_with_TE_uncheck<0>(msg, ": ");
+        }
+
+        /**
+         * @brief 返回存储的Err值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @panic 当值为Ok时panic，panic信息为Ok的值。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Err<const char*>("likely panic");
+         * std::string_view val = x.unwrap_err();
+         * assert(val == "likely panic");
+         *
+         * auto y = C163q::Ok<const char*>(42);
+         * val = y.unwrap_err();   // panics with `42`
+         * ```
+         */
+        [[nodiscard]] constexpr E unwrap_err() {
+            if (is_err()) return std::move(get<1>());
+            call_panic_with_TE_uncheck<0>("", "");
+        }
+
+        [[nodiscard]] constexpr E unwrap_err() const {
+            if (is_err()) return get<1>();
+            call_panic_with_TE_uncheck<0>("", "");
+        }
+
+
+    private:
+        /**
+         * @brief 调用panic，同时，若类型是formattable时，打印其值
+         */
+        template<size_t I>
+            requires (I == 0 || I == 1)
+        [[noreturn]] constexpr void call_panic_with_TE_uncheck(const std::string_view& msg, const std::string_view& sep) const {
+            using U = std::conditional_t<I == 0, T, E>;
+            if constexpr (
+#ifdef MY_CXX23
+                std::formattable<E, char>
+#else // C++23 ^^^ /  vvv C++20
+                requires (std::formatter<U>& f, const std::formatter<U>& cf, U&& t,
+                    std::format_parse_context& p, std::format_context& fc) {
+                    { f.parse(p) };
+                    { cf.format(t, fc) };
+                }
+#endif
+            ) {
+                auto&& str = std::format("{}{}{}", msg, sep, get<I>());
+                panic(str);
+            } else {
+                panic(msg);
+            }
         }
 
     private:
         std::variant<T, E> m_data;
     };
 
+    
+    template<class T>
+    struct result_transform {
+    private:
+        using U = std::remove_reference_t<T>;
+    public:
+        using type = std::conditional_t<
+            std::is_array_v<U>,
+            std::add_pointer_t<std::remove_extent_t<U>>,
+            std::conditional_t<
+                std::is_function_v<U>,
+                std::add_pointer_t<U>,
+                U>>;
+    };
+
+    template<typename T>
+    using result_transform_t = result_transform<T>::type;
 
     /**
      * @brief Result对象的工厂函数。
      *
      * 由于T类型可推导，因此类型参数中E在前。
      *
-     * @tparam E 构造的Result的错误类型std::decay_t<E>
-     * @tparam T 构造的Result的存储数据的类型std::decay_t<T>
+     * @tparam E 构造的Result的错误类型result_transform_t<E>
+     * @tparam T 构造的Result的存储数据的类型result_transform_t<T>
      *
      * @param value 构造Result的Ok状态的值
      *
@@ -639,10 +832,10 @@ namespace C163q {
      * ```
      */
     template<typename E, typename T>
-        requires std::move_constructible<std::decay_t<T>>
-    Result<std::decay_t<T>, std::decay_t<E>> Ok(T&& value)
-        noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, T>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<T>>, std::forward<T>(value));
+        requires std::move_constructible<result_transform_t<T>>
+    Result<result_transform_t<T>, result_transform_t<E>> Ok(T&& value)
+        noexcept(std::is_nothrow_constructible_v<result_transform_t<T>, T>) {
+        return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<0>, std::forward<T>(value));
     }
 
     /**
@@ -666,10 +859,10 @@ namespace C163q {
      * ```
      */
     template<typename E, typename T, typename ...Args>
-        requires std::constructible_from<std::decay_t<T>, Args...>
-    Result<std::decay_t<T>, std::decay_t<E>> Ok(Args&&... args)
-        noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, Args...>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<T>>, std::forward<Args>(args)...);
+        requires std::constructible_from<result_transform_t<T>, Args...>
+    Result<result_transform_t<T>, result_transform_t<E>> Ok(Args&&... args)
+        noexcept(std::is_nothrow_constructible_v<result_transform_t<T>, Args...>) {
+        return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<0>, std::forward<Args>(args)...);
     }
 
     /**
@@ -691,10 +884,10 @@ namespace C163q {
      * ```
      */
     template<typename T, typename E>
-        requires std::move_constructible<std::decay_t<E>>
-    Result<std::decay_t<T>, std::decay_t<E>> Err(E&& err)
-        noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, E>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<E>>, std::forward<E>(err));
+        requires std::move_constructible<result_transform_t<E>>
+    Result<result_transform_t<T>, result_transform_t<E>> Err(E&& err)
+        noexcept(std::is_nothrow_constructible_v<result_transform_t<E>, E>) {
+        return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<1>, std::forward<E>(err));
     }
 
     /**
@@ -716,11 +909,54 @@ namespace C163q {
      * ```
      */
     template<typename T, typename E, typename ...Args>
-        requires std::constructible_from<std::decay_t<E>, Args...>
-    Result<std::decay_t<T>, std::decay_t<E>> Err(Args&&... args)
-        noexcept(std::is_nothrow_constructible_v<std::decay_t<E>, Args...>) {
-        return Result<std::decay_t<T>, std::decay_t<E>>(std::in_place_type<std::decay_t<E>>, std::forward<Args>(args)...);
+        requires std::constructible_from<result_transform_t<E>, Args...>
+    Result<result_transform_t<T>, result_transform_t<E>> Err(Args&&... args)
+        noexcept(std::is_nothrow_constructible_v<result_transform_t<E>, Args...>) {
+        return Result<result_transform_t<T>, result_transform_t<E>>(
+                std::in_place_index<1>, std::forward<Args>(args)...);
     }
+
+    /**
+     * @brief 代理调用函数，正常返回值或捕获异常值都会存储在Result中。
+     *
+     * @example
+     * ```
+     * std::string s1 = "123456";
+     * std::string s2 = "foo";
+     * auto f = [](const std::string& s) {
+     *     int(*f)(const std::string&, size_t*, int) = std::stoi;
+     *     return f(s, nullptr, 10);
+     * };
+     *
+     * auto val1 = C163q::result_helper<std::exception>::invoke(f, s1).unwrap_or_default();
+     * assert(val1 == 123456);
+     *
+     * auto val2 = C163q::result_helper<std::exception>::invoke(f, s2).unwrap_or_default();
+     * assert(val2 == 0);
+     * ```
+     */
+    template<typename E>
+    struct result_helper {
+        template<typename F, typename ...Args>
+            using Ret_t = std::invoke_result_t<F, Args...>;
+
+        template<typename F, typename ...Args>
+            using T = std::conditional_t<std::is_lvalue_reference_v<Ret_t<F, Args...>>,
+                  std::reference_wrapper<std::remove_reference_t<Ret_t<F, Args...>>>,
+                  std::remove_reference_t<Ret_t<F, Args...>>>;
+
+        template<typename F, typename ...Args>
+            requires std::invocable<F, Args...>
+        static Result<T<F, Args...>, E> invoke(F&& f, Args&&... args) {
+            using Type = T<F, Args...>;
+            try {
+                return Result<Type, E>(std::in_place_index<0>,
+                        ::std::invoke(std::forward<F>(f), std::forward<Args>(args)...));
+            } catch (E& e) {
+                return Result<Type, E>(std::in_place_index<1>, std::move(e));
+            }
+        }
+    };
 
 }
 
