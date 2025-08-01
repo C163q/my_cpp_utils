@@ -763,6 +763,133 @@ namespace C163q {
         }
 
 
+        template<typename U>
+        [[nodiscard]] Result<U, E> and_then(Result<U, E> res)
+        noexcept(std::is_nothrow_move_constructible_v<Result<U, E>> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, E&&> &&
+                 std::is_nothrow_move_constructible_v<E>) {
+            if (is_ok()) return res;
+            return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
+        }
+
+        template<typename U>
+        [[nodiscard]] Result<U, E> and_then(Result<U, E> res) const
+        noexcept(std::is_nothrow_move_constructible_v<Result<U, E>> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, const E&> &&
+                 std::is_nothrow_copy_constructible_v<E>) {
+            if (is_ok()) return res;
+            return Result<U, E>(std::in_place_index<1>, get<1>());
+        }
+
+
+        template<typename U, typename F>
+            requires (requires (F f, T t) {
+                { std::invoke(f, std::move(t)) } -> std::convertible_to<Result<U, E>>;
+            })
+        [[nodiscard]] Result<U, E> and_then(F&& op)
+        noexcept(std::is_nothrow_invocable_v<F, T&&> && std::is_nothrow_move_constructible_v<T> &&
+                 std::is_nothrow_move_constructible_v<E> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, E&&> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::invoke_result_t<F, T&&>>) {
+            if (is_ok()) return std::invoke(std::forward<F>(op), std::move(get<0>()));
+            return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
+        }
+
+        template<typename U, typename F>
+            requires (requires (F f, const T& t) {
+                { std::invoke(f, t) } -> std::convertible_to<Result<U, E>>;
+            })
+        [[nodiscard]] Result<U, E> and_then(F&& op) const
+        noexcept(std::is_nothrow_invocable_v<F, const T&> && std::is_nothrow_copy_constructible_v<E> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, const E&> &&
+                 std::is_nothrow_constructible_v<Result<U, E>, std::invoke_result_t<F, const T&>>) {
+            if (is_ok()) return std::invoke(std::forward<F>(op), get<0>());
+            return Result<U, E>(std::in_place_index<1>, get<1>());
+        }
+
+
+        template<typename F>
+        [[nodiscard]] Result<T, F> or_else(Result<T, F> res)
+        noexcept(std::is_nothrow_move_constructible_v<Result<T, F>> &&
+                 std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, T&&> &&
+                 std::is_nothrow_move_constructible_v<T>) {
+            if (is_err()) return res;
+            return Result<T, F>(std::in_place_index<0>, std::move(get<0>()));
+        }
+
+        template<typename F>
+        [[nodiscard]] Result<T, F> or_else(Result<T, F> res) const
+        noexcept(std::is_nothrow_move_constructible_v<Result<T, F>> &&
+                 std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, const T&> &&
+                 std::is_nothrow_copy_constructible_v<T>) {
+            if (is_err()) return res;
+            return Result<T, F>(std::in_place_index<0>, get<0>());
+        }
+
+
+        template<typename F, typename O>
+            requires (requires (O f, E e) {
+                { std::invoke(f, std::move(e)) } -> std::convertible_to<Result<T, F>>;
+            })
+        [[nodiscard]] Result<T, F> and_then(O&& op)
+        noexcept(std::is_nothrow_invocable_v<O, E&&> && std::is_nothrow_move_constructible_v<E> &&
+                 std::is_nothrow_move_constructible_v<T> &&
+                 std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, T&&> &&
+                 std::is_nothrow_constructible_v<Result<T, E>, std::invoke_result_t<O, E&&>>) {
+            if (is_err()) return std::invoke(std::forward<O>(op), std::move(get<1>()));
+            return Result<T, F>(std::in_place_index<0>, std::move(get<0>()));
+        }
+
+        template<typename F, typename O>
+            requires (requires (O f, const E& e) {
+                { std::invoke(f, e) } -> std::convertible_to<Result<T, F>>;
+            })
+        [[nodiscard]] Result<T, F> and_then(O&& op) const
+        noexcept(std::is_nothrow_invocable_v<O, const E&> && std::is_nothrow_copy_constructible_v<T> &&
+                 std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, const T&> &&
+                 std::is_nothrow_constructible_v<Result<T, F>, std::invoke_result_t<O, const E&>>) {
+            if (is_err()) return std::invoke(std::forward<O>(op), get<1>());
+            return Result<T, F>(std::in_place_index<0>, get<0>());
+        }
+
+
+        [[nodiscard]] T unwrap_or(T default_value)
+        noexcept(std::is_nothrow_move_constructible_v<T>) {
+            if (is_ok()) return std::move(get<0>());
+            return default_value;
+        }
+
+        [[nodiscard]] T unwrap_or(T default_value) const
+        noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_copy_constructible_v<T>) {
+            if (is_ok()) return get<0>();
+            return default_value;
+        }
+
+
+        template<typename F>
+            requires requires (F f, E e) {
+                { std::invoke(f, std::move(e)) } -> std::convertible_to<T>;
+            }
+        [[nodiscard]] T unwrap_or(F&& op)
+        noexcept(std::is_nothrow_invocable_v<F, E&&> && std::is_nothrow_move_constructible_v<T> &&
+                 std::is_nothrow_move_constructible_v<E> &&
+                 std::is_nothrow_constructible_v<T, std::invoke_result_t<F, E&&>>) {
+            if (is_ok()) return std::move(get<0>());
+            return std::invoke(std::forward<F>(op), std::move(get<1>()));
+        }
+
+        template<typename F>
+            requires requires (F f, const E& e) {
+                { std::invoke(f, e) } -> std::convertible_to<T>;
+            }
+        [[nodiscard]] T unwrap_or(F&& op) const
+        noexcept(std::is_nothrow_invocable_v<F, const E&> && std::is_nothrow_copy_constructible_v<T> &&
+                 std::is_nothrow_constructible_v<T, std::invoke_result_t<F, const E&>>) {
+            if (is_ok()) return get<0>();
+            return std::invoke(std::forward<F>(op), get<1>());
+        }
+
+
     private:
         /**
          * @brief 调用panic，同时，若类型是formattable时，打印其值
