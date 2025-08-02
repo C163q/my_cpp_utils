@@ -16,12 +16,13 @@
 #else
 
 #include<algorithm>
-#include<format>
-#include<string_view>
+#include<compare>
 #include<concepts>
 #include<cstddef>
+#include<format>
 #include<functional>
 #include<optional>
+#include<string_view>
 #include<type_traits>
 #include<utility>
 #include<variant>
@@ -222,7 +223,7 @@ namespace C163q {
          */
         template<typename U>
             requires ((std::is_same_v<U, T> || std::is_same_v<U, E>) && !std::is_same_v<T, E>)
-        [[nodiscard]] constexpr U& get() noexcept {
+        [[nodiscard]] constexpr U& get() {
             try {
                 return std::get<U>(m_data);
             } catch(...) {
@@ -232,7 +233,7 @@ namespace C163q {
 
         template<typename U>
             requires ((std::is_same_v<U, T> || std::is_same_v<U, E>) && !std::is_same_v<T, E>)
-        [[nodiscard]] constexpr const U& get() const noexcept {
+        [[nodiscard]] constexpr const U& get() const {
             try {
                 return std::get<U>(m_data);
             } catch(...) {
@@ -242,7 +243,7 @@ namespace C163q {
 
         template<size_t I>
             requires (I == 0 || I == 1)
-        [[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<T, E>>& get() noexcept {
+        [[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<T, E>>& get() {
             try {
                 return std::get<I>(m_data);
             } catch(...) {
@@ -252,7 +253,7 @@ namespace C163q {
 
         template<size_t I>
             requires (I == 0 || I == 1)
-        [[nodiscard]] constexpr const std::variant_alternative_t<I, std::variant<T, E>>& get() const noexcept {
+        [[nodiscard]] constexpr const std::variant_alternative_t<I, std::variant<T, E>>& get() const {
             try {
                 return std::get<I>(m_data);
             } catch(...) {
@@ -795,7 +796,7 @@ namespace C163q {
          * ```
          */
         template<typename U>
-        [[nodiscard]] Result<U, E> and_then(Result<U, E> res)
+        [[nodiscard]] constexpr Result<U, E> and_then(Result<U, E> res)
         noexcept(std::is_nothrow_move_constructible_v<Result<U, E>> &&
                  std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, E&&> &&
                  std::is_nothrow_move_constructible_v<E>) {
@@ -804,7 +805,7 @@ namespace C163q {
         }
 
         template<typename U>
-        [[nodiscard]] Result<U, E> and_then(Result<U, E> res) const
+        [[nodiscard]] constexpr Result<U, E> and_then(Result<U, E> res) const
         noexcept(std::is_nothrow_move_constructible_v<Result<U, E>> &&
                  std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, const E&> &&
                  std::is_nothrow_copy_constructible_v<E>) {
@@ -844,7 +845,7 @@ namespace C163q {
             requires (requires (F f, T t) {
                 { std::invoke(f, std::move(t)) } -> std::convertible_to<Result<U, E>>;
             })
-        [[nodiscard]] Result<U, E> and_then(F&& op)
+        [[nodiscard]] constexpr Result<U, E> and_then(F&& op)
         noexcept(std::is_nothrow_invocable_v<F, T&&> && std::is_nothrow_move_constructible_v<T> &&
                  std::is_nothrow_move_constructible_v<E> &&
                  std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, E&&> &&
@@ -857,7 +858,7 @@ namespace C163q {
             requires (requires (F f, const T& t) {
                 { std::invoke(f, t) } -> std::convertible_to<Result<U, E>>;
             })
-        [[nodiscard]] Result<U, E> and_then(F&& op) const
+        [[nodiscard]] constexpr Result<U, E> and_then(F&& op) const
         noexcept(std::is_nothrow_invocable_v<F, const T&> && std::is_nothrow_copy_constructible_v<E> &&
                  std::is_nothrow_constructible_v<Result<U, E>, std::in_place_index_t<1>, const E&> &&
                  std::is_nothrow_constructible_v<Result<U, E>, std::invoke_result_t<F, const T&>>) {
@@ -895,7 +896,7 @@ namespace C163q {
          * ```
          */
         template<typename F>
-        [[nodiscard]] Result<T, F> or_else(Result<T, F> res)
+        [[nodiscard]] constexpr Result<T, F> or_else(Result<T, F> res)
         noexcept(std::is_nothrow_move_constructible_v<Result<T, F>> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, T&&> &&
                  std::is_nothrow_move_constructible_v<T>) {
@@ -904,7 +905,7 @@ namespace C163q {
         }
 
         template<typename F>
-        [[nodiscard]] Result<T, F> or_else(Result<T, F> res) const
+        [[nodiscard]] constexpr Result<T, F> or_else(Result<T, F> res) const
         noexcept(std::is_nothrow_move_constructible_v<Result<T, F>> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, const T&> &&
                  std::is_nothrow_copy_constructible_v<T>) {
@@ -939,7 +940,7 @@ namespace C163q {
             requires (requires (O f, E e) {
                 { std::invoke(f, std::move(e)) } -> std::convertible_to<Result<T, F>>;
             })
-        [[nodiscard]] Result<T, F> or_else(O&& op)
+        [[nodiscard]] constexpr Result<T, F> or_else(O&& op)
         noexcept(std::is_nothrow_invocable_v<O, E&&> && std::is_nothrow_move_constructible_v<E> &&
                  std::is_nothrow_move_constructible_v<T> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, T&&> &&
@@ -952,7 +953,7 @@ namespace C163q {
             requires (requires (O f, const E& e) {
                 { std::invoke(f, e) } -> std::convertible_to<Result<T, F>>;
             })
-        [[nodiscard]] Result<T, F> or_else(O&& op) const
+        [[nodiscard]] constexpr Result<T, F> or_else(O&& op) const
         noexcept(std::is_nothrow_invocable_v<O, const E&> && std::is_nothrow_copy_constructible_v<T> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, const T&> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::invoke_result_t<O, const E&>>) {
@@ -976,13 +977,13 @@ namespace C163q {
          * assert(y.unwrap_or(val) == 2);
          * ```
          */
-        [[nodiscard]] T unwrap_or(T default_value)
+        [[nodiscard]] constexpr T unwrap_or(T default_value)
         noexcept(std::is_nothrow_move_constructible_v<T>) {
             if (is_ok()) return std::move(get<0>());
             return default_value;
         }
 
-        [[nodiscard]] T unwrap_or(T default_value) const
+        [[nodiscard]] constexpr T unwrap_or(T default_value) const
         noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_copy_constructible_v<T>) {
             if (is_ok()) return get<0>();
             return default_value;
@@ -1008,7 +1009,7 @@ namespace C163q {
             requires requires (F f, E e) {
                 { std::invoke(f, std::move(e)) } -> std::convertible_to<T>;
             }
-        [[nodiscard]] T unwrap_or(F&& op)
+        [[nodiscard]] constexpr T unwrap_or(F&& op)
         noexcept(std::is_nothrow_invocable_v<F, E&&> && std::is_nothrow_move_constructible_v<T> &&
                  std::is_nothrow_move_constructible_v<E> &&
                  std::is_nothrow_constructible_v<T, std::invoke_result_t<F, E&&>>) {
@@ -1020,15 +1021,48 @@ namespace C163q {
             requires requires (F f, const E& e) {
                 { std::invoke(f, e) } -> std::convertible_to<T>;
             }
-        [[nodiscard]] T unwrap_or(F&& op) const
+        [[nodiscard]] constexpr T unwrap_or(F&& op) const
         noexcept(std::is_nothrow_invocable_v<F, const E&> && std::is_nothrow_copy_constructible_v<T> &&
                  std::is_nothrow_constructible_v<T, std::invoke_result_t<F, const E&>>) {
             if (is_ok()) return get<0>();
             return std::invoke(std::forward<F>(op), get<1>());
         }
 
+        /**
+         * @brief 返回值的拷贝
+         */
+        [[nodiscard]] constexpr Result<T, E> clone() const noexcept(std::is_nothrow_copy_constructible_v<Result<T, E>>) {
+            return *this;
+        }
+
+        /**
+         * @brief 使用other进行赋值
+         */
+        template<typename U, typename F>
+        [[nodiscard]] Result<T, E>& assign(const Result<U, F>& other) {
+            if (other.is_ok()) m_data.emplace<0>(other.template get<0>());
+            else m_data.emplace<1>(other.template get<1>());
+            return *this;
+        }
+
+        template<typename U, typename F>
+        [[nodiscard]] Result<T, E>& assign(Result<U, F>&& other) {
+            if (other.is_ok()) m_data.emplace<0>(std::move(other.template get<0>()));
+            else m_data.emplace<1>(other.template get<1>());
+            return *this;
+        }
+
+
+        [[nodiscard]] const Result<T, E>& as_const() const noexcept {
+            return *this;
+        }
+
+        [[nodiscard]] Result<T, E>& as_mut() const noexcept {
+            return const_cast<Result<T, E>&>(*this);
+        }
 
     private:
+
         /**
          * @brief 调用panic，同时，若类型是formattable时，打印其值
          */
@@ -1057,6 +1091,21 @@ namespace C163q {
     private:
         std::variant<T, E> m_data;
     };
+
+
+    template<typename T, typename E>
+        requires (std::three_way_comparable<T> && std::three_way_comparable<E>)
+    constexpr std::common_comparison_category_t<
+        std::compare_three_way_result_t<T>, std::compare_three_way_result_t<E>>
+        operator<=>(const Result<T, E>& lhs, const Result<T, E>& rhs) {
+        return lhs.data() <=> rhs.data();
+    }
+
+    template<typename T, typename E>
+        requires (std::equality_comparable<T> && std::equality_comparable<E>)
+    constexpr bool operator==(const Result<T, E>& lhs, const Result<T, E>& rhs) {
+        return lhs.data() == rhs.data();
+    }
 
     
     template<class T>
@@ -1221,6 +1270,20 @@ namespace C163q {
                 return Result<Type, E>(std::in_place_index<1>, std::move(e));
             }
         }
+
+        template<typename F, typename ...Args>
+            requires std::invocable<F, Args...>
+        static Result<T<F, Args...>, E> invoke_else_panic(F&& f, Args&&... args) {
+            using Type = T<F, Args...>;
+            try {
+                return Result<Type, E>(std::in_place_index<0>,
+                        ::std::invoke(std::forward<F>(f), std::forward<Args>(args)...));
+            } catch (E& e) {
+                return Result<Type, E>(std::in_place_index<1>, std::move(e));
+            } catch (...) {
+                panic("panics after call `result_helper::invoke_else_panic`");
+            }
+        }
     };
 
 }
@@ -1241,31 +1304,32 @@ namespace std {
      */
     template<typename U, typename T, typename E>
         requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
-    [[nodiscard]] constexpr U& get(C163q::Result<T, E>& result) noexcept {
+    [[nodiscard]] constexpr U& get(C163q::Result<T, E>& result) {
         return result.template get<U>();
     }
 
     template<typename U, typename T, typename E>
         requires (std::is_same_v<U, T> || std::is_same_v<U, E>)
-    [[nodiscard]] constexpr const U& get(const C163q::Result<T, E>& result) noexcept {
+    [[nodiscard]] constexpr const U& get(const C163q::Result<T, E>& result) {
         return result.template get<U>();
     }
 
     template<size_t I, typename T, typename E>
         requires (I == 0 || I == 1)
     [[nodiscard]] constexpr variant_alternative_t<I, std::variant<T, E>>& get(
-            C163q::Result<T, E>& result) noexcept {
+            C163q::Result<T, E>& result) {
         return result.template get<I>();
     }
 
     template<size_t I, typename T, typename E>
         requires (I == 0 || I == 1)
     [[nodiscard]] constexpr const std::variant_alternative_t<I, std::variant<T, E>>& get(
-            const C163q::Result<T, E>& result) noexcept {
+            const C163q::Result<T, E>& result) {
         return result.template get<I>();
     }
 
 }
+
 
 
 #endif // MY_CXX20

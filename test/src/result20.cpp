@@ -16,7 +16,7 @@
 #include<string_view>
 #include<tuple>
 #include<type_traits>
-#include <utility>
+#include<utility>
 #include<vector>
 
 int main() {
@@ -293,6 +293,11 @@ int main() {
 
         assert(C163q::Ok<const char*>(2u).unwrap_or(count) == 2);
         assert(C163q::Err<unsigned>("foo").unwrap_or(count) == 3);
+    }
+    {
+        auto val = C163q::Result<std::string, std::vector<int>>("123");
+        auto res = val.clone();
+        (void) (val >= res.as_const().as_mut());
     }
     std::cout << "PASS!" << std::endl;
 }
