@@ -1,4 +1,6 @@
 #include"../../src/rs/result20.hpp"
+#include"../../src/rs/panic.hpp"
+#include"../../src/core/config.hpp"
 #include<cassert>
 #include<chrono>
 #include<cstddef>
@@ -18,6 +20,9 @@
 #include<vector>
 
 int main() {
+#ifdef MY_CXX23
+    C163q::enable_traceback = true;
+#endif // MY_CXX23
     {
         auto x = C163q::Ok<const char*>(-3);
         assert(x.is_ok() == true);
@@ -211,6 +216,83 @@ int main() {
 
         // auto y = C163q::Ok<const char*>(42);
         // val = y.unwrap_err();   // panics with `42`
+    }
+    {
+        auto x = C163q::Ok<const char*>(2);
+        auto y = C163q::Err<const char*>("late error");
+        auto z = x.and_then(y);
+        static_assert(std::is_same_v<C163q::Result<const char*, const char*>, decltype(z)>);
+        assert(std::string_view("late error") == z.unwrap_err());
+
+        auto a = C163q::Err<unsigned>("early error");
+        auto b = C163q::Ok<const char*>("foo");
+        assert(std::string_view("early error") == a.and_then(b).unwrap_err());
+
+        auto c = C163q::Err<unsigned>("not a 2");
+        auto d = C163q::Err<const char*>("late error");
+        assert(std::string_view("not a 2") == c.and_then(d).unwrap_err());
+
+        auto e = C163q::Ok<const char*>(2);
+        auto f = C163q::Ok<const char*>("different result type");
+        auto g = e.and_then(f);
+        static_assert(std::is_same_v<C163q::Result<const char*, const char*>, decltype(g)>);
+        assert(std::string_view("different result type") == g.unwrap());
+    }
+    {
+        auto f = [](const std::string& s) {
+            int(*f)(const std::string&, size_t*, int) = std::stoi;
+            return C163q::result_helper<std::exception>::invoke(f, s, nullptr, 10)
+                .map_err_into<std::string_view>([](auto) { return "overflowed"; });
+        };
+
+        using C163q::Ok;
+        using C163q::Err;
+        assert(Ok<std::string_view>("2").and_then<int>(f).unwrap() == 2);
+        assert(Ok<std::string_view>("2147483648").and_then<int>(f).unwrap_err() == "overflowed");
+        auto x = C163q::Err<std::string, std::string_view>("not a number").and_then<int>(f).unwrap_err();
+        assert(x == "not a number");
+    }
+    {
+        auto x = C163q::Ok<const char*>(2);
+        auto y = C163q::Err<int, std::string_view>("late error");
+        auto z = x.or_else(y);
+        static_assert(std::is_same_v<C163q::Result<int, std::string_view>, decltype(z)>);
+        assert(2 == z.unwrap());
+
+        auto a = C163q::Err<int>("early error");
+        auto b = C163q::Ok<std::string_view>(2);
+        assert(2 == a.or_else(b).unwrap());
+
+        auto c = C163q::Err<const char*>("not a 2");
+        auto d = C163q::Err<const char*>("late error");
+        assert(std::string_view("late error") == c.or_else(d).unwrap_err());
+
+        auto e = C163q::Ok<const char*>(2);
+        auto f = C163q::Ok<const char*>(100);
+        assert(2 == e.or_else(f).unwrap());
+    }
+    {
+        auto sq = [](unsigned x) { return C163q::Ok<unsigned>(x * x); };
+        auto err = [](unsigned x) { return C163q::Err<unsigned>(x); };
+
+        assert(2 == C163q::Ok<unsigned>(2u).or_else<unsigned>(sq).or_else<unsigned>(sq).unwrap());
+        assert(2 == C163q::Ok<unsigned>(2u).or_else<unsigned>(err).or_else<unsigned>(sq).unwrap());
+        assert(9 == C163q::Err<unsigned>(3u).or_else<unsigned>(sq).or_else<unsigned>(err).unwrap());
+        assert(3 == C163q::Err<unsigned>(3u).or_else<unsigned>(err).or_else<unsigned>(err).unwrap_err());
+    }
+    {
+        auto val = 2;
+        auto x = C163q::Result<unsigned, const char*>(9u);
+        assert(x.unwrap_or(val) == 9);
+
+        auto y = C163q::Result<unsigned, const char*>("error");
+        assert(y.unwrap_or(val) == 2);
+    }
+    {
+        auto count = [](const std::string_view& str) { return unsigned(str.size()); };
+
+        assert(C163q::Ok<const char*>(2u).unwrap_or(count) == 2);
+        assert(C163q::Err<unsigned>("foo").unwrap_or(count) == 3);
     }
     std::cout << "PASS!" << std::endl;
 }

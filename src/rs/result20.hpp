@@ -95,6 +95,7 @@ namespace C163q {
         constexpr explicit Result(std::in_place_type_t<U>, Args&&... args)
             : m_data(std::in_place_type<U>, std::forward<Args>(args)...) {}
 
+
         template<size_t I, typename ...Args>
             requires ((I == 0 || I == 1) &&
                     std::is_constructible_v<std::conditional_t<I == 0, T, E>, Args...>)
@@ -762,7 +763,37 @@ namespace C163q {
             call_panic_with_TE_uncheck<0>("", "");
         }
 
-
+        /**
+         * @brief 如果自身是Ok，则返回res；否则返回自身的Err值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @tparam U 要返回的Result的Ok值的类型
+         *
+         * @param res 另一个Result，当自身为Ok时返回该值。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(2);
+         * auto y = C163q::Err<const char*>("late error");
+         * auto z = x.and_then(y);
+         * static_assert(std::is_same_v<C163q::Result<const char*, const char*>, decltype(z)>);
+         * assert(std::string_view("late error") == z.unwrap_err());
+         *
+         * auto a = C163q::Err<unsigned>("early error");
+         * auto b = C163q::Ok<const char*>("foo");
+         * assert(std::string_view("early error") == a.and_then(b).unwrap_err());
+         *
+         * auto c = C163q::Err<unsigned>("not a 2");
+         * auto d = C163q::Err<const char*>("late error");
+         * assert(std::string_view("not a 2") == c.and_then(d).unwrap_err());
+         *
+         * auto e = C163q::Ok<const char*>(2);
+         * auto f = C163q::Ok<const char*>("different result type");
+         * auto g = e.and_then(f);
+         * static_assert(std::is_same_v<C163q::Result<const char*, const char*>, decltype(g)>);
+         * assert(std::string_view("different result type") == g.unwrap());
+         * ```
+         */
         template<typename U>
         [[nodiscard]] Result<U, E> and_then(Result<U, E> res)
         noexcept(std::is_nothrow_move_constructible_v<Result<U, E>> &&
@@ -781,7 +812,34 @@ namespace C163q {
             return Result<U, E>(std::in_place_index<1>, get<1>());
         }
 
-
+        /**
+         * @brief 如果自身为Ok则调用op，否则返回自身的Err值
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @tparam U 返回的Result的Ok值的类型，可以与T的类型不同
+         * @tparam F 可对用对象的类型，参数为E&&（或const E&，const时），返回类型为Result<U, E>
+         *
+         * @param op 可调用对象，参数类型见{@tparam F}
+         *
+         * @result 当自身为Ok时，返回值为用Err值调用op的结果。
+         *         当自身为Err时，返回值为用自身Err值构造Result的结果。
+         *
+         * @example
+         * ```
+         * auto f = [](const std::string& s) {
+         *     int(*f)(const std::string&, size_t*, int) = std::stoi;
+         *     return C163q::result_helper<std::exception>::invoke(f, s, nullptr, 10)
+         *         .map_err_into<std::string_view>([](auto) { return "overflowed"; });
+         * };
+         *
+         * using C163q::Ok;
+         * using C163q::Err;
+         * assert(Ok<std::string_view>("2").and_then<int>(f).unwrap() == 2);
+         * assert(Ok<std::string_view>("2147483648").and_then<int>(f).unwrap_err() == "overflowed");
+         * auto x = C163q::Err<std::string, std::string_view>("not a number").and_then<int>(f).unwrap_err();
+         * assert(x == "not a number");
+         * ```
+         */
         template<typename U, typename F>
             requires (requires (F f, T t) {
                 { std::invoke(f, std::move(t)) } -> std::convertible_to<Result<U, E>>;
@@ -807,7 +865,35 @@ namespace C163q {
             return Result<U, E>(std::in_place_index<1>, get<1>());
         }
 
-
+        /**
+         * @brief 如果自身是Err，则返回res；否则返回自身的Ok值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @tparam F 要返回的Result的Err值的类型
+         *
+         * @param res 另一个Result，当自身为Err时返回该值。
+         *
+         * @example
+         * ```
+         * auto x = C163q::Ok<const char*>(2);
+         * auto y = C163q::Err<int, std::string_view>("late error");
+         * auto z = x.or_else(y);
+         * static_assert(std::is_same_v<C163q::Result<int, std::string_view>, decltype(z)>);
+         * assert(2 == z.unwrap());
+         *
+         * auto a = C163q::Err<int>("early error");
+         * auto b = C163q::Ok<std::string_view>(2);
+         * assert(2 == a.or_else(b).unwrap());
+         *
+         * auto c = C163q::Err<const char*>("not a 2");
+         * auto d = C163q::Err<const char*>("late error");
+         * assert(std::string_view("late error") == c.or_else(d).unwrap_err());
+         *
+         * auto e = C163q::Ok<const char*>(2);
+         * auto f = C163q::Ok<const char*>(100);
+         * assert(2 == e.or_else(f).unwrap());
+         * ```
+         */
         template<typename F>
         [[nodiscard]] Result<T, F> or_else(Result<T, F> res)
         noexcept(std::is_nothrow_move_constructible_v<Result<T, F>> &&
@@ -826,12 +912,34 @@ namespace C163q {
             return Result<T, F>(std::in_place_index<0>, get<0>());
         }
 
-
+        /**
+         * @brief 如果自身为Err则调用op，否则返回自身的Ok值
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @tparam F 返回的Result的Err值的类型，可以与E的类型不同
+         * @tparam O 可对用对象的类型，参数为T&&（或const T&，const时），返回类型为Result<T, F>
+         *
+         * @param op 可调用对象，参数类型见{@tparam O}
+         *
+         * @result 当自身为Ok时，返回值为用自身Ok值构造Result的结果。
+         *         当自身为Err时，返回值为用Err值调用op的结果。
+         *
+         * @example
+         * ```
+         * auto sq = [](unsigned x) { return C163q::Ok<unsigned>(x * x); };
+         * auto err = [](unsigned x) { return C163q::Err<unsigned>(x); };
+         *
+         * assert(2 == C163q::Ok<unsigned>(2u).or_else<unsigned>(sq).or_else<unsigned>(sq).unwrap());
+         * assert(2 == C163q::Ok<unsigned>(2u).or_else<unsigned>(err).or_else<unsigned>(sq).unwrap());
+         * assert(9 == C163q::Err<unsigned>(3u).or_else<unsigned>(sq).or_else<unsigned>(err).unwrap());
+         * assert(3 == C163q::Err<unsigned>(3u).or_else<unsigned>(err).or_else<unsigned>(err).unwrap_err());
+         * ```
+         */
         template<typename F, typename O>
             requires (requires (O f, E e) {
                 { std::invoke(f, std::move(e)) } -> std::convertible_to<Result<T, F>>;
             })
-        [[nodiscard]] Result<T, F> and_then(O&& op)
+        [[nodiscard]] Result<T, F> or_else(O&& op)
         noexcept(std::is_nothrow_invocable_v<O, E&&> && std::is_nothrow_move_constructible_v<E> &&
                  std::is_nothrow_move_constructible_v<T> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, T&&> &&
@@ -844,7 +952,7 @@ namespace C163q {
             requires (requires (O f, const E& e) {
                 { std::invoke(f, e) } -> std::convertible_to<Result<T, F>>;
             })
-        [[nodiscard]] Result<T, F> and_then(O&& op) const
+        [[nodiscard]] Result<T, F> or_else(O&& op) const
         noexcept(std::is_nothrow_invocable_v<O, const E&> && std::is_nothrow_copy_constructible_v<T> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::in_place_index_t<0>, const T&> &&
                  std::is_nothrow_constructible_v<Result<T, F>, std::invoke_result_t<O, const E&>>) {
@@ -852,7 +960,22 @@ namespace C163q {
             return Result<T, F>(std::in_place_index<0>, get<0>());
         }
 
-
+        /**
+         * @brief 若为Ok状态则返回存储值，否则返回所给值。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @param default_value 当Err状态时，返回该值。
+         *
+         * @example
+         * ```
+         * auto val = 2;
+         * auto x = C163q::Result<unsigned, const char*>(9u);
+         * assert(x.unwrap_or(val) == 9);
+         *
+         * auto y = C163q::Result<unsigned, const char*>("error");
+         * assert(y.unwrap_or(val) == 2);
+         * ```
+         */
         [[nodiscard]] T unwrap_or(T default_value)
         noexcept(std::is_nothrow_move_constructible_v<T>) {
             if (is_ok()) return std::move(get<0>());
@@ -865,7 +988,22 @@ namespace C163q {
             return default_value;
         }
 
-
+        /**
+         * @brief 若为Ok状态则返回存储值，否则使用Err值调用可调用对象并返回。
+         *        非const时移动存储值，const时复制存储值。
+         *
+         * @tparam F 可调用对象的类型，参数为E&&（或const E&，const时），返回类型可以转换为T类型。
+         *
+         * @param op 可调用对象
+         *
+         * @example
+         * ```
+         * auto count = [](const std::string_view& str) { return unsigned(str.size()); };
+         *
+         * assert(C163q::Ok<const char*>(2u).unwrap_or(count) == 2);
+         * assert(C163q::Err<unsigned>("foo").unwrap_or(count) == 3);
+         * ```
+         */
         template<typename F>
             requires requires (F f, E e) {
                 { std::invoke(f, std::move(e)) } -> std::convertible_to<T>;
@@ -900,7 +1038,7 @@ namespace C163q {
             using U = std::conditional_t<I == 0, T, E>;
             if constexpr (
 #ifdef MY_CXX23
-                std::formattable<E, char>
+                std::formattable<U, char>
 #else // C++23 ^^^ /  vvv C++20
                 requires (std::formatter<U>& f, const std::formatter<U>& cf, U&& t,
                     std::format_parse_context& p, std::format_context& fc) {
