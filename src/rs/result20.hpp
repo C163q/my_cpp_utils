@@ -40,10 +40,34 @@ namespace C163q {
      *
      * 若Result保有类型T，则代表其为Ok状态；若Result保有类型E，则代表其为Err状态。
      *
+     * @example
+     * ```
+     * using namespace C163q;
+     * auto good_result = Ok<int>(10);  // Result<int, int>
+     * auto bad_result = Err<int>(10);  // Result<int, int>
+     * assert(good_result.is_ok() && !good_result.is_err());
+     * assert(bad_result.is_err() && !bad_result.is_ok());
+     *
+     * good_result = good_result.map_into<int>([](auto i) { return i + 1; });  // 消耗本身并产生一个新的Result
+     * bad_result = bad_result.map_into<int>([](auto i) { return i - 1; });
+     * assert(good_result == Ok<int>(11));
+     * assert(bad_result == Err<int>(9));
+     *
+     * auto another_good = good_result.and_then<bool>([](auto i) { return Ok<int>(i == 1); }); // Result<bool, int>
+     * assert(another_good.as_const().unwrap() == true);   // 使用as_const()阻止移动自身值
+     * auto another_bad = bad_result.or_else<int>([](auto i) { return Ok<int>(i + 20); });
+     * assert(another_bad.as_ref().unwrap() == 29);    // 使用as_ref()产生一个指向保存值引用的Result
+     *                                                 // 注意变量的生命周期！
+     * auto final_awesome_result = good_result.unwrap();
+     * assert(final_awesome_result);
+     * ```
      */
     template<typename T, typename E>
         requires (std::is_object_v<T> && std::is_object_v<E>)
     class Result {
+    private:
+        using as_cref_t = Result<std::reference_wrapper<const T>, std::reference_wrapper<const E>>;
+        using as_ref_t = Result<std::reference_wrapper<T>, std::reference_wrapper<E>>;
 
     public:
         /**
@@ -1059,6 +1083,22 @@ namespace C163q {
 
         [[nodiscard]] Result<T, E>& as_mut() const noexcept {
             return const_cast<Result<T, E>&>(*this);
+        }
+        
+        /**
+         * @brief 将Result<T, E>转换为Result<&T, &E>。
+         *        产生一个新的Result，包含对原始值的引用。
+         *
+         * @warning 注意保存元素的生命周期！
+         */
+        [[nodiscard]] as_cref_t as_ref() const noexcept {
+            if (is_ok()) return as_cref_t(std::in_place_index<0>, std::cref(get<0>()));
+            return as_cref_t(std::in_place_index<1>, std::cref(get<1>()));
+        }
+
+        [[nodiscard]] as_ref_t as_ref() noexcept {
+            if (is_ok()) return as_ref_t(std::in_place_index<0>, std::ref(get<0>()));
+            return as_ref_t(std::in_place_index<0>, std::ref(get<1>()));
         }
 
     private:

@@ -299,6 +299,26 @@ int main() {
         auto res = val.clone();
         (void) (val >= res.as_const().as_mut());
     }
+    {
+        using namespace C163q;
+        auto good_result = Ok<int>(10);  // Result<int, int>
+        auto bad_result = Err<int>(10);  // Result<int, int>
+        assert(good_result.is_ok() && !good_result.is_err());
+        assert(bad_result.is_err() && !bad_result.is_ok());
+
+        good_result = good_result.map_into<int>([](auto i) { return i + 1; });  // 消耗本身并产生一个新的Result
+        bad_result = bad_result.map_err_into<int>([](auto i) { return i - 1; });
+        assert(good_result == Ok<int>(11));
+        assert(bad_result == Err<int>(9));
+
+        auto another_good = good_result.and_then<bool>([](auto i) { return Ok<int>(i == 11); }); // Result<bool, int>
+        assert(another_good.as_const().unwrap() == true);   // 使用as_const()阻止移动自身值
+        auto another_bad = bad_result.or_else<int>([](auto i) { return Ok<int>(i + 20); });
+        assert(another_bad.as_ref().unwrap() == 29);    // 使用as_ref()产生一个指向保存值引用的Result
+                                                        // 注意变量的生命周期！
+        auto final_awesome_result = good_result.unwrap();
+        assert(final_awesome_result);
+    }
     std::cout << "PASS!" << std::endl;
 }
 
