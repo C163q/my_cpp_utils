@@ -322,6 +322,11 @@ int main() {
         auto final_awesome_result = good_result.unwrap();
         assert(final_awesome_result);
     }
+    {
+        C163q::Result<void, std::exception> x;
+        x.unwrap();
+        x.get<0>();
+    }
     std::cout << "PASS!" << std::endl;
 }
 
