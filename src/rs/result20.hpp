@@ -48,12 +48,12 @@ namespace C163q {
      * assert(good_result.is_ok() && !good_result.is_err());
      * assert(bad_result.is_err() && !bad_result.is_ok());
      *
-     * good_result = good_result.map_into<int>([](auto i) { return i + 1; });  // 消耗本身并产生一个新的Result
-     * bad_result = bad_result.map_into<int>([](auto i) { return i - 1; });
+     * good_result = good_result.map<int>([](auto i) { return i + 1; });   // 消耗本身并产生一个新的Result
+     * bad_result = bad_result.map_err<int>([](auto i) { return i - 1; });
      * assert(good_result == Ok<int>(11));
      * assert(bad_result == Err<int>(9));
      *
-     * auto another_good = good_result.and_then<bool>([](auto i) { return Ok<int>(i == 1); }); // Result<bool, int>
+     * auto another_good = good_result.and_then<bool>([](auto i) { return Ok<int>(i == 11); }); // Result<bool, int>
      * assert(another_good.as_const().unwrap() == true);   // 使用as_const()阻止移动自身值
      * auto another_bad = bad_result.or_else<int>([](auto i) { return Ok<int>(i + 20); });
      * assert(another_bad.as_ref().unwrap() == 29);    // 使用as_ref()产生一个指向保存值引用的Result
@@ -341,6 +341,8 @@ namespace C163q {
          * 在Ok状态下时，const T&会被传入并将返回值作为构造Result<U, E>的U类型的值
          * 在Err状态下，仅仅是复制构造E的值
          *
+         * @warning 不同于非const，const下调用后原始值被复制
+         *
          * @param func 用于映射的可调用对象，接收一个const T&并返回一个可以构造为U的类型
          *
          * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
@@ -354,7 +356,8 @@ namespace C163q {
          * };
          * std::vector<double> ret;
          * for (auto&& res : vec) {
-         *     auto val = res.map<double>([](auto val) { return val * 1.5; });
+         *     // 使用as_const保证值不会被移动！
+         *     auto val = res.as_const().map<double>([](auto val) { return val * 1.5; });
          *     if (val.is_ok()) {
          *         ret.push_back(val.get<0>());
          *     } else {
@@ -382,6 +385,8 @@ namespace C163q {
          * @param default_value 当处于Err状态时返回的值
          * @param func          当处于Ok状态时所调用的可调用对象，参数类型为const T&，返回值类型为U
          *
+         * @warning 不同于非const，const下调用后原始值被复制
+         *
          * @tparam U 返回值类型，default_value应该为该类型，func的返回值应当可以转换为该类型
          * @tparam F 可调用对象的类型
          *
@@ -389,11 +394,11 @@ namespace C163q {
          *
          * @example
          * ```
-         * auto x = C163q::Ok<std::exception, std::string>("foo");
-         * assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);
+         * const auto x = C163q::Ok<std::exception, std::string>("foo");
+         * assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);  // x是const的，复制值
          *
-         * auto y = C163q::Err<std::string, const char*>("bar");
-         * assert(y.map(42, [](auto&& str) { return str.size(); }) == 42);
+         * const auto y = C163q::Err<std::string, const char*>("bar");
+         * assert(y.map(42, [](auto&& str) { return str.size(); }) == 42); // y是const的，复制值
          * ```
          */
         template<typename U, typename F>
@@ -410,6 +415,8 @@ namespace C163q {
         /**
          * @brief 如果处于Err状态，用错误值调用callback，否则用保有值调用func
          *
+         * @warning 不同于非const，const下调用后原始值被复制
+         *
          * @param fallback 当处于Err状态时，所调用的可调用对象，参数类型为const E&，返回值类型可以转换为U
          * @param func     当处于Ok状态时，所调用的可调用对象，参数类型为const T&，返回值类型可以转换为U
          *
@@ -424,12 +431,12 @@ namespace C163q {
          * ```
          * size_t k = 21;
          * 
-         * auto x = C163q::Ok<std::exception, std::string_view>("foo");
-         * auto res = x.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * const auto x = C163q::Ok<std::exception, std::string_view>("foo");
+         * auto res = x.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });  // x是const的，复制值
          * assert(res == 3);
          *
-         * auto y = C163q::Err<std::string_view>("bar");
-         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * const auto y = C163q::Err<std::string_view>("bar");
+         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });   // y是const的，复制值
          * assert(res == 42);
          * ```
          */
@@ -453,6 +460,8 @@ namespace C163q {
          * 在Ok状态下，仅仅是复制构造T的值
          * 在Err状态下时，const E&会被传入并将返回值作为构造Result<T, F>的F类型的值
          *
+         * @warning 不同于非const，const下调用后原始值被复制
+         *
          * @param op 用于映射的可调用对象，接收一个const E&并返回一个可以构造为F的类型
          *
          * @tparam F 返回的Result中，处于Err状态时保有的值的类型，op的返回值应该能够转换为该类型
@@ -460,12 +469,13 @@ namespace C163q {
          *
          * @example
          * ```
-         * auto x = C163q::Ok<const char*>(1);
-         * auto res_x = x.map_err<void*>([] (auto e) { return (void*)e; });
+         * const auto x = C163q::Ok<const char*>(1);
+         * auto res_x = x.map_err<void*>([] (auto e) { return (void*)e; }); // x是const的，复制值
          * assert(res_x.get<0>() == 1);
          *
          * auto y = C163q::Err<const char*>(12);
-         * auto res_y = y.map_err<std::string>([] (auto e) { return std::format("error code: {}", e); });
+         * auto res_y = y.as_const().map_err<std::string>([] (auto e) { return std::format("error code: {}", e); });
+         * // 使用as_const()转换为常引用，复制值
          * assert(res_y.get<1>() == "error code: 12");
          * ```
          */
@@ -486,7 +496,7 @@ namespace C163q {
          * 在Ok状态下时，T&&会被移动传入并将返回值作为构造Result<U, E>的U类型的值
          * 在Err状态下，仅仅是移动构造E的值
          *
-         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         * @warning 不同于const，非const下调用后原始值被移动
          *
          * @param 用于映射的可调用对象，接收一个T并返回一个可以构造为U的类型
          * 
@@ -496,7 +506,7 @@ namespace C163q {
          * @example
          * ```
          * C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
-         * auto dst = src.map_into<std::vector<int>>([](auto&& v) {
+         * auto dst = src.map<std::vector<int>>([](auto v) {
          *         for (auto&& e : v) {
          *             e *= 2;
          *         }
@@ -504,14 +514,14 @@ namespace C163q {
          *     });
          * std::vector<int> check{ 2, 4, 6, 8 };
          * assert(dst.get<0>() == check);
-         * assert(src.get<0>().size() == 0);
+         * assert(src.get<0>().size() == 0);   // 原始值被移动，因此大小为0
          * ```
          */
         template<typename U, typename F>
             requires (requires (F f, T t) {
                 { std::invoke(f, std::move(t)) } -> std::convertible_to<U>;
             } && std::is_move_constructible_v<E> && std::is_move_constructible_v<T>)
-        [[nodiscard]] constexpr Result<U, E> map_into(F&& func)
+        [[nodiscard]] constexpr Result<U, E> map(F&& func)
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
                      std::is_nothrow_move_constructible_v<E> && std::is_nothrow_move_constructible_v<T> &&
                      std::is_nothrow_invocable_v<F, T>) {
@@ -523,7 +533,7 @@ namespace C163q {
         /**
          * @brief 如果处于Err状态，返回默认值，否则移动保有值调用可调用对象
          *
-         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         * @warning 不同于const，非const下调用后原始值被移动
          *
          * @param default_value 当处于Err状态时返回的值
          * @param func          当处于Ok状态时所调用的可调用对象，参数类型为T，返回值类型为U
@@ -536,14 +546,14 @@ namespace C163q {
          * @example
          * ```
          * C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
-         * auto dst = src.map_into<int>(0, [](std::vector<int> v) {
+         * auto dst = src.map<int>(0, [](std::vector<int> v) {
          *         return std::accumulate(std::begin(v), std::end(v), 0);
          *     });
          * assert(dst == 10);
-         * assert(src.get<0>().size() == 0);
+         * assert(src.get<0>().size() == 0);   // 由于原始值被移动，因此大小为0
          *
          * C163q::Result<const char*, std::string> x(std::in_place_type<std::string>, "bar");
-         * auto y = x.map_into<std::string>("Error", [](std::string v) {
+         * auto y = x.map<std::string>("Error", [](std::string v) {
          *         v.push_back('z');
          *         return v;
          *     });
@@ -555,7 +565,7 @@ namespace C163q {
             requires (requires (F f, T t) {
                 { std::invoke(f, std::move(t)) } -> std::convertible_to<U>;
             } && std::is_move_constructible_v<U> && std::is_move_constructible_v<T>)
-        [[nodiscard]] constexpr U map_into(U default_value, F&& func)
+        [[nodiscard]] constexpr U map(U default_value, F&& func)
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
                      std::is_nothrow_move_constructible_v<U> && std::is_nothrow_move_constructible_v<T> &&
                      std::is_nothrow_invocable_v<F, T>) {
@@ -566,7 +576,7 @@ namespace C163q {
         /**
          * @brief 如果处于Err状态，移动错误值调用callback，否则移动保有值调用func
          *
-         * @warning 不同于map()方法，map_into()调用后原始值被移动
+         * @warning 不同于const，非const下调用后原始值被移动
          *
          * @param fallback 当处于Err状态时，所调用的可调用对象，参数类型为E，返回值类型可以转换为U
          * @param func     当处于Ok状态时，所调用的可调用对象，参数类型为T，返回值类型可以转换为U
@@ -583,12 +593,12 @@ namespace C163q {
          * size_t k = 21;
          * 
          * auto x = C163q::Ok<std::exception, std::string>("foo");
-         * auto res = x.map_into<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * auto res = x.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });  // x是非const的，移动值
          * assert(res == 3);
          * assert(x.get<0>().size() == 0);
          *
          * auto y = C163q::Err<std::string_view>("bar");
-         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+         * res = y.map<size_t>([k] (auto e) { return k * 2; }, [] (auto v) { return v.size(); });   // y是非const的，移动值
          * assert(res == 42);
          * ```
          */
@@ -598,7 +608,7 @@ namespace C163q {
                 { std::invoke(f1, std::move(t)) } -> std::convertible_to<U>;
             } && std::is_move_constructible_v<U> && std::is_move_constructible_v<T> &&
                  std::is_move_constructible_v<E>)
-        [[nodiscard]] constexpr U map_into(D&& fallback, F&& func)
+        [[nodiscard]] constexpr U map(D&& fallback, F&& func)
             noexcept (std::is_nothrow_constructible_v<U, std::invoke_result_t<D, E>> &&
                       std::is_nothrow_constructible_v<U, std::invoke_result_t<F, T>> &&
                       std::is_nothrow_move_constructible_v<U> && std::is_nothrow_move_constructible_v<T> &&
@@ -614,7 +624,7 @@ namespace C163q {
          * 在Ok状态下，仅仅是移动构造T的值
          * 在Err状态下时，E&&会被移动传入并将返回值作为构造Result<T, F>的F类型的值
          *
-         * @warning 不同于map_err()方法，map_err_into()调用后原始值被移动
+         * @warning 不同于const，非const下调用后原始值被移动
          *
          * @param op 用于映射的可调用对象，接收一个E并返回一个可以构造为F的类型
          *
@@ -624,12 +634,13 @@ namespace C163q {
          * @example
          * ```
          * auto x = C163q::Ok<const char*>(std::vector{ 1 });
-         * auto res_x = x.map_err_into<void*>([](auto e) { return (void*)e; });
+         * auto res_x = x.map_err<void*>([](auto e) { return (void*)e; }); // x是非const的，移动值
          * assert(res_x.get<0>() == std::vector{ 1 });
          * assert(x.get<0>().size() == 0);
          *
          * auto y = C163q::Err<int, std::string>("out of range");
-         * auto res_y = y.map_err_into<std::string>([](std::string e) { return std::format("error message: {}", e); });
+         * auto res_y = y.map_err<std::string>([](std::string e) { return std::format("error message: {}", e); });
+         * // y是非const的，移动值
          * assert(res_y.get<1>() == "error message: out of range");
          * assert(y.get<1>().size() == 0);
          * ```
@@ -638,7 +649,7 @@ namespace C163q {
             requires (requires (O op, E e) {
                 { std::invoke(op, std::move(e)) } -> std::convertible_to<F>;
             } && std::is_move_constructible_v<T> && std::is_move_constructible_v<E>)
-        [[nodiscard]] constexpr Result<T, F> map_err_into(O&& op)
+        [[nodiscard]] constexpr Result<T, F> map_err(O&& op)
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, E>> &&
                      std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E> &&
                      std::is_nothrow_invocable_v<O, E>) {
@@ -854,7 +865,7 @@ namespace C163q {
          * auto f = [](const std::string& s) {
          *     int(*f)(const std::string&, size_t*, int) = std::stoi;
          *     return C163q::result_helper<std::exception>::invoke(f, s, nullptr, 10)
-         *         .map_err_into<std::string_view>([](auto) { return "overflowed"; });
+         *         .map_err<std::string_view>([](auto) { return "overflowed"; });
          * };
          *
          * using C163q::Ok;

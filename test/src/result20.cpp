@@ -82,20 +82,21 @@ int main() {
         };
         std::vector<double> ret;
         for (auto&& res : vec) {
-            auto val = res.map<double>([](auto val) { return val * 1.5; });
+            // 使用as_const保证值不会被移动！
+            auto val = res.as_const().map<double>([](auto val) { return val * 1.5; });
             if (val.is_ok()) {
                 ret.push_back(val.get<0>());
             } else {
                 ret.push_back(0);
             }
-            static_assert(noexcept(res.map<double>([](auto val) noexcept { return double(val); })));
+            static_assert(noexcept(res.as_const().map<double>([](auto val) noexcept { return double(val); })));
         }
         std::vector<double> check{ 1 * 1.5, 2 * 1.5, 5 * 1.5, 0, 10 * 1.5, 20 * 1.5 };
         assert(ret == check);
     }
     {
         C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
-        auto dst = src.map_into<std::vector<int>>([](auto&& v) {
+        auto dst = src.map<std::vector<int>>([](auto v) {
                 for (auto&& e : v) {
                     e *= 2;
                 }
@@ -103,25 +104,25 @@ int main() {
             });
         std::vector<int> check{ 2, 4, 6, 8 };
         assert(dst.get<0>() == check);
-        assert(src.get<0>().size() == 0);
+        assert(src.get<0>().size() == 0);   // 原始值被移动，因此大小为0
     }
     {
-        auto x = C163q::Ok<std::exception, std::string>("foo");
-        assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);
+        const auto x = C163q::Ok<std::exception, std::string>("foo");
+        assert(x.map(42, [](auto&& str) { return str.size(); }) == 3);  // x是const的，复制值
 
-        auto y = C163q::Err<std::string, const char*>("bar");
-        assert(y.map(42, [](auto&& str) { return str.size(); }) == 42);
+        const auto y = C163q::Err<std::string, const char*>("bar");
+        assert(y.map(42, [](auto&& str) { return str.size(); }) == 42); // y是const的，复制值
     }
     {
         C163q::Result<std::vector<int>, const char*> src(std::vector{1, 2, 3, 4});
-        auto dst = src.map_into<int>(0, [](std::vector<int> v) {
+        auto dst = src.map<int>(0, [](std::vector<int> v) {
                 return std::accumulate(std::begin(v), std::end(v), 0);
             });
         assert(dst == 10);
-        assert(src.get<0>().size() == 0);
+        assert(src.get<0>().size() == 0);   // 由于原始值被移动，因此大小为0
 
         C163q::Result<const char*, std::string> x(std::in_place_type<std::string>, "bar");
-        auto y = x.map_into<std::string>("Error", [](std::string v) {
+        auto y = x.map<std::string>("Error", [](std::string v) {
                 v.push_back('z');
                 return v;
             });
@@ -131,43 +132,45 @@ int main() {
     {
         size_t k = 21;
         
-        auto x = C163q::Ok<std::exception, std::string_view>("foo");
-        auto res = x.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        const auto x = C163q::Ok<std::exception, std::string_view>("foo");
+        auto res = x.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });  // x是const的，复制值
         assert(res == 3);
 
-        auto y = C163q::Err<std::string_view>("bar");
-        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        const auto y = C163q::Err<std::string_view>("bar");
+        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });   // y是const的，复制值
         assert(res == 42);
     }
     {
         size_t k = 21;
         
         auto x = C163q::Ok<std::exception, std::string>("foo");
-        auto res = x.map_into<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        auto res = x.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });  // x是非const的，移动值
         assert(res == 3);
         assert(x.get<0>().size() == 0);
 
         auto y = C163q::Err<std::string_view>("bar");
-        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });
+        res = y.map<size_t>([k](auto e) { return k * 2; }, [] (auto v) { return v.size(); });   // y是非const的，移动值
         assert(res == 42);
     }
     {
-        auto x = C163q::Ok<const char*>(1);
-        auto res_x = x.map_err<void*>([](auto e) { return (void*)e; });
+        const auto x = C163q::Ok<const char*>(1);
+        auto res_x = x.map_err<void*>([](auto e) { return (void*)e; }); // x是const的，复制值
         assert(res_x.get<0>() == 1);
 
         auto y = C163q::Err<const char*>(12);
-        auto res_y = y.map_err<std::string>([](auto e) { return std::format("error code: {}", e); });
+        auto res_y = y.as_const().map_err<std::string>([](auto e) { return std::format("error code: {}", e); });
+        // 使用as_const()转换为常引用，复制值
         assert(res_y.get<1>() == "error code: 12");
     }
     {
         auto x = C163q::Ok<const char*>(std::vector{ 1 });
-        auto res_x = x.map_err_into<void*>([](auto e) { return (void*)e; });
+        auto res_x = x.map_err<void*>([](auto e) { return (void*)e; }); // x是非const的，移动值
         assert(res_x.get<0>() == std::vector{ 1 });
         assert(x.get<0>().size() == 0);
 
         auto y = C163q::Err<int, std::string>("out of range");
-        auto res_y = y.map_err_into<std::string>([](std::string e) { return std::format("error message: {}", e); });
+        auto res_y = y.map_err<std::string>([](std::string e) { return std::format("error message: {}", e); });
+        // y是非const的，移动值
         assert(res_y.get<1>() == "error message: out of range");
         assert(y.get<1>().size() == 0);
     }
@@ -242,7 +245,7 @@ int main() {
         auto f = [](const std::string& s) {
             int(*f)(const std::string&, size_t*, int) = std::stoi;
             return C163q::result_helper<std::exception>::invoke(f, s, nullptr, 10)
-                .map_err_into<std::string_view>([](auto) { return "overflowed"; });
+                .map_err<std::string_view>([](auto) { return "overflowed"; });
         };
 
         using C163q::Ok;
@@ -306,8 +309,8 @@ int main() {
         assert(good_result.is_ok() && !good_result.is_err());
         assert(bad_result.is_err() && !bad_result.is_ok());
 
-        good_result = good_result.map_into<int>([](auto i) { return i + 1; });  // 消耗本身并产生一个新的Result
-        bad_result = bad_result.map_err_into<int>([](auto i) { return i - 1; });
+        good_result = good_result.map<int>([](auto i) { return i + 1; });   // 消耗本身并产生一个新的Result
+        bad_result = bad_result.map_err<int>([](auto i) { return i - 1; });
         assert(good_result == Ok<int>(11));
         assert(bad_result == Err<int>(9));
 
