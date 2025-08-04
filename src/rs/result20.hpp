@@ -177,7 +177,7 @@ namespace C163q {
          */
         template<typename F>
             requires requires (F f, const T& t) {
-                { std::invoke(f, t) } -> std::same_as<bool>;
+                { std::invoke(f, t) } -> std::convertible_to<bool>;
             }
         [[nodiscard]] constexpr bool is_ok_and(F&& f)
             const noexcept(std::is_nothrow_invocable_v<F, const T&>) {
@@ -228,7 +228,7 @@ namespace C163q {
          */
         template<typename F>
             requires requires (F f, const E& e) {
-                { std::invoke(f, e) } -> std::same_as<bool>;
+                { std::invoke(f, e) } -> std::convertible_to<bool>;
             }
         [[nodiscard]] constexpr bool is_err_and(F&& f)
             const noexcept(std::is_nothrow_invocable_v<F, const E&>) {
@@ -1088,11 +1088,11 @@ namespace C163q {
         }
 
 
-        [[nodiscard]] const Result<T, E>& as_const() const noexcept {
+        [[nodiscard]] constexpr const Result<T, E>& as_const() const noexcept {
             return *this;
         }
 
-        [[nodiscard]] Result<T, E>& as_mut() const noexcept {
+        [[nodiscard]] constexpr Result<T, E>& as_mut() const noexcept {
             return const_cast<Result<T, E>&>(*this);
         }
         
@@ -1102,12 +1102,12 @@ namespace C163q {
          *
          * @warning 注意保存元素的生命周期！
          */
-        [[nodiscard]] as_cref_t as_ref() const noexcept {
+        [[nodiscard]] constexpr as_cref_t as_ref() const noexcept {
             if (is_ok()) return as_cref_t(std::in_place_index<0>, std::cref(get<0>()));
             return as_cref_t(std::in_place_index<1>, std::cref(get<1>()));
         }
 
-        [[nodiscard]] as_ref_t as_ref() noexcept {
+        [[nodiscard]] constexpr as_ref_t as_ref() noexcept {
             if (is_ok()) return as_ref_t(std::in_place_index<0>, std::ref(get<0>()));
             return as_ref_t(std::in_place_index<1>, std::ref(get<1>()));
         }
@@ -1512,20 +1512,20 @@ namespace C163q {
             return *this;
         }
 
-        [[nodiscard]] const Result<void, E>& as_const() const noexcept {
+        [[nodiscard]] constexpr const Result<void, E>& as_const() const noexcept {
             return *this;
         }
 
-        [[nodiscard]] Result<void, E>& as_mut() const noexcept {
+        [[nodiscard]] constexpr Result<void, E>& as_mut() const noexcept {
             return const_cast<Result<void, E>&>(*this);
         }
 
-        [[nodiscard]] as_cref_t as_ref() const noexcept {
+        [[nodiscard]] constexpr as_cref_t as_ref() const noexcept {
             if (is_ok()) return as_cref_t();
             return as_cref_t(std::in_place_index<1>, std::cref(get<1>()));
         }
 
-        [[nodiscard]] as_ref_t as_ref() noexcept {
+        [[nodiscard]] constexpr as_ref_t as_ref() noexcept {
             if (is_ok()) return as_ref_t();
             return as_ref_t(std::in_place_index<1>, std::ref(get<1>()));
         }
