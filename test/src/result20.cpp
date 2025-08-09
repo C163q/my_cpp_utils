@@ -62,18 +62,18 @@ int main() {
     {
         auto x = C163q::Ok<const char*>(std::vector{ 1, 2, 3, 4 });
         auto x_cmp = std::vector{ 1, 2, 3, 4 };
-        assert(x.ok().value() == x_cmp);
+        assert(x.ok().unwrap() == x_cmp);
         assert(std::get<0>(x).size() == 0); // moved
         
         auto y = C163q::Err<unsigned>("Err");
-        assert(y.ok().has_value() == false);
+        assert(y.ok().is_some() == false);
     }
     {
         auto x = C163q::Ok<const char*>(1);
-        assert(x.err().has_value() == false);
+        assert(x.err().is_some() == false);
 
         auto y = C163q::Err<unsigned>("Err");
-        assert(y.err().value()[0] == 'E');
+        assert(y.err().unwrap()[0] == 'E');
     }
     {
         auto Ok = [](int val) { return C163q::Ok<const char*>(val); };

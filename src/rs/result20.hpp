@@ -15,6 +15,9 @@
     static_assert(false, "Require C++20!");
 #else
 
+
+// TODO: add `copied` method for Result<std::reference_wrapper<T>, E>
+
 #include<algorithm>
 #include<compare>
 #include<concepts>
@@ -26,9 +29,17 @@
 #include<type_traits>
 #include<utility>
 #include<variant>
+#include"option.hpp"
 #include"panic.hpp"
 
 namespace C163q {
+
+    template<typename T>
+        requires (std::is_object_v<T> && !std::is_array_v<T> &&
+                 !std::is_same_v<std::remove_cv_t<T>, std::nullopt_t> &&
+                 !std::is_same_v<std::remove_cv_t<T>, std::in_place_t>) ||
+                  std::is_same_v<T, void>
+    class Option;
 
     /**
      * @brief Rust当中的Result枚举类型，表示有可能成功（返回值）或者失败（返回异常）的类型。
@@ -68,6 +79,22 @@ namespace C163q {
     private:
         using as_cref_t = Result<std::reference_wrapper<const T>, std::reference_wrapper<const E>>;
         using as_ref_t = Result<std::reference_wrapper<T>, std::reference_wrapper<E>>;
+
+
+        template<typename U>
+        struct my_type {
+            template<typename V>
+            static std::type_identity<typename V::type> test(V::type*) { return {}; }
+
+            template<typename V>
+            static std::type_identity<void> test(...) { return {}; }
+
+            using type = decltype(test<U>(nullptr))::type;
+        };
+
+    public:
+        using value_type = T;
+        using error_type = E;
 
     public:
         /**
@@ -176,9 +203,7 @@ namespace C163q {
          * ```
          */
         template<typename F>
-            requires requires (F f, const T& t) {
-                { std::invoke(f, t) } -> std::convertible_to<bool>;
-            }
+            requires std::predicate<F, const T&>
         [[nodiscard]] constexpr bool is_ok_and(F&& f)
             const noexcept(std::is_nothrow_invocable_v<F, const T&>) {
             return !m_data.index() && std::invoke(std::forward<F>(f), const_cast<const T&>(std::get<0>(m_data)));
@@ -227,9 +252,7 @@ namespace C163q {
          * ```
          */
         template<typename F>
-            requires requires (F f, const E& e) {
-                { std::invoke(f, e) } -> std::convertible_to<bool>;
-            }
+            requires std::predicate<F, const E&>
         [[nodiscard]] constexpr bool is_err_and(F&& f)
             const noexcept(std::is_nothrow_invocable_v<F, const E&>) {
             return !!m_data.index() && std::invoke(std::forward<F>(f), const_cast<const E&>(std::get<1>(m_data)));
@@ -290,49 +313,49 @@ namespace C163q {
         }
 
         /**
-         * @brief 将Result<T, E>转换为std::optional<T>
+         * @brief 将Result<T, E>转换为Option<T>
          *
-         * 将自身转换为std::optional<T>，自身保有的值将会被移动，若为Err状态，则为空值。
+         * 将自身转换为Option<T>，自身保有的值将会被移动，若为Err状态，则为空值。
          *
-         * @return 一个std::optional<T>。在Ok状态下，移动构造一个有值的std::optional<T>，
-         *         在Err状态下，返回一个无值的std::optional<T>
+         * @return 一个Option<T>。在Ok状态下，移动构造一个有值的Option<T>，
+         *         在Err状态下，返回一个无值的Option<T>
          *
          * @example
          * ```
          * auto x = C163q::Ok<const char*>(std::vector{ 1, 2, 3, 4 });
          * auto x_cmp = std::vector{ 1, 2, 3, 4 };
-         * assert(x.ok().value() == x_cmp);
+         * assert(x.ok().unwrap() == x_cmp);
          * assert(std::get<0>(x).size() == 0); // moved
-         * 
+         *
          * auto y = C163q::Err<unsigned>("Err");
-         * assert(y.ok().has_value() == false);
+         * assert(y.ok().is_some() == false);
          * ```
          */
-        [[nodiscard]] constexpr std::optional<T> ok() noexcept(std::is_nothrow_move_constructible_v<T>) {
+        [[nodiscard]] constexpr Option<T> ok() noexcept(std::is_nothrow_move_constructible_v<T>) {
             if (is_err()) return std::nullopt;
-            return std::move(get<0>());
+            return Option<T>(std::in_place, std::move(get<0>()));
         }
 
         /**
-         * @brief 将Result<T, E>转换为std::optional<E>
+         * @brief 将Result<T, E>转换为Option<E>
          *
-         * 将自身转换为std::optional<E>，自身保有的值将会被移动，若为Ok状态，则为空值。
+         * 将自身转换为Option<E>，自身保有的值将会被移动，若为Ok状态，则为空值。
          *
-         * @return 一个std::optional<E>。在Err状态下，移动构造一个有值的std::optional<E>，
-         *         在Err状态下，返回一个无值的std::optional<E>
+         * @return 一个Option<E>。在Err状态下，移动构造一个有值的Option<E>，
+         *         在Err状态下，返回一个无值的Option<E>
          *
          * @example
          * ```
          * auto x = C163q::Ok<const char*>(1);
-         * assert(x.err().has_value() == false);
+         * assert(x.err().is_some() == false);
          *
          * auto y = C163q::Err<unsigned>("Err");
-         * assert(y.err().value()[0] == 'E');
+         * assert(y.err().unwrap()[0] == 'E');
          * ```
          */
-        [[nodiscard]] constexpr std::optional<E> err() noexcept(std::is_nothrow_move_constructible_v<E>) {
+        [[nodiscard]] constexpr Option<E> err() noexcept(std::is_nothrow_move_constructible_v<E>) {
             if (is_ok()) return std::nullopt;
-            return std::move(get<1>());
+            return Option<E>(std::in_place, std::move(get<1>()));
         }
 
         /**
@@ -376,7 +399,7 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F, const T&>> &&
                      std::is_nothrow_copy_constructible_v<E> && std::is_nothrow_invocable_v<F, const T&>) {
             if (is_err()) return Result<U, E>(std::in_place_index<1>, get<1>());
-            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(std::forward<F>(func), get<0>())));
+            return Result<U, E>(std::in_place_index<0>, std::invoke(std::forward<F>(func), get<0>()));
         }
 
         /**
@@ -487,7 +510,7 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, const E&>> &&
                      std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_invocable_v<O, const E&>) {
             if (is_ok()) return Result<T, F>(std::in_place_index<0>, get<0>());
-            return Result<T, F>(std::in_place_index<1>, std::move(std::invoke(std::forward<O>(op), get<1>())));
+            return Result<T, F>(std::in_place_index<1>, std::invoke(std::forward<O>(op), get<1>()));
         }
 
         /**
@@ -526,8 +549,8 @@ namespace C163q {
                      std::is_nothrow_move_constructible_v<E> && std::is_nothrow_move_constructible_v<T> &&
                      std::is_nothrow_invocable_v<F, T>) {
             if (is_err()) return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
-            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(
-                            std::forward<F>(func), std::move(get<0>()))));
+            return Result<U, E>(std::in_place_index<0>, std::invoke(
+                            std::forward<F>(func), std::move(get<0>())));
         }
 
         /**
@@ -654,8 +677,8 @@ namespace C163q {
                      std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E> &&
                      std::is_nothrow_invocable_v<O, E>) {
             if (is_ok()) return Result<T, F>(std::in_place_index<0>, std::move(get<0>()));
-            return Result<T, F>(std::in_place_index<1>, std::move(std::invoke(
-                            std::forward<O>(op), std::move(get<1>()))));
+            return Result<T, F>(std::in_place_index<1>, std::invoke(
+                            std::forward<O>(op), std::move(get<1>())));
         }
 
         /**
@@ -1070,18 +1093,34 @@ namespace C163q {
             return *this;
         }
 
+        template<typename U = my_type<T>::type>
+            requires std::is_copy_constructible_v<T> && std::same_as<T, std::reference_wrapper<U>> &&
+                     std::is_move_constructible_v<E>
+        [[nodiscard]] constexpr Result<U, E> copied() {
+            if (is_err()) return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
+            return Result<U, E>(std::in_place_index<0>, get<0>().get());
+        }
+
+        template<typename U = my_type<T>::type>
+            requires std::is_copy_constructible_v<T> && std::same_as<T, std::reference_wrapper<U>> &&
+                     std::is_copy_constructible_v<E>
+        [[nodiscard]] constexpr Result<U, E> copied() const {
+            if (is_err()) return Result<U, E>(std::in_place_index<1>, get<1>());
+            return Result<U, E>(std::in_place_index<0>, get<0>().get());
+        }
+
         /**
          * @brief 使用other进行赋值
          */
         template<typename U, typename F>
-        [[nodiscard]] Result<T, E>& assign(const Result<U, F>& other) {
+        Result<T, E>& assign(const Result<U, F>& other) {
             if (other.is_ok()) m_data.emplace<0>(other.template get<0>());
             else m_data.emplace<1>(other.template get<1>());
             return *this;
         }
 
         template<typename U, typename F>
-        [[nodiscard]] Result<T, E>& assign(Result<U, F>&& other) {
+        Result<T, E>& assign(Result<U, F>&& other) {
             if (other.is_ok()) m_data.emplace<0>(std::move(other.template get<0>()));
             else m_data.emplace<1>(std::move(other.template get<1>()));
             return *this;
@@ -1306,7 +1345,7 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<U, std::invoke_result_t<F>> &&
                      std::is_nothrow_copy_constructible_v<E> && std::is_nothrow_invocable_v<F>) {
             if (is_err()) return Result<U, E>(std::in_place_index<1>, get<1>());
-            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(std::forward<F>(func))));
+            return Result<U, E>(std::in_place_index<0>, std::invoke(std::forward<F>(func)));
         }
 
         // 非const同下
@@ -1343,7 +1382,7 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, const E&>> &&
                      std::is_nothrow_invocable_v<O, const E&>) {
             if (is_ok()) return Result<void, F>();
-            return Result<void, F>(std::in_place_index<1>, std::move(std::invoke(std::forward<O>(op), get<1>())));
+            return Result<void, F>(std::in_place_index<1>, std::invoke(std::forward<O>(op), get<1>()));
         }
 
         template<typename U, typename F>
@@ -1355,7 +1394,7 @@ namespace C163q {
                      std::is_nothrow_move_constructible_v<E> &&
                      std::is_nothrow_invocable_v<F>) {
             if (is_err()) return Result<U, E>(std::in_place_index<1>, std::move(get<1>()));
-            return Result<U, E>(std::in_place_index<0>, std::move(std::invoke(std::forward<F>(func))));
+            return Result<U, E>(std::in_place_index<0>, std::invoke(std::forward<F>(func)));
         }
 
         template<typename U, typename D, typename F>
@@ -1380,8 +1419,8 @@ namespace C163q {
             noexcept(std::is_nothrow_constructible_v<F, std::invoke_result_t<O, E>> &&
                      std::is_nothrow_move_constructible_v<E> && std::is_nothrow_invocable_v<O, E>) {
             if (is_ok()) return Result<void, F>();
-            return Result<void, F>(std::in_place_index<1>, std::move(std::invoke(
-                            std::forward<O>(op), std::move(get<1>()))));
+            return Result<void, F>(std::in_place_index<1>, std::invoke(
+                            std::forward<O>(op), std::move(get<1>())));
         }
 
         // 非const同下
@@ -1615,7 +1654,7 @@ namespace C163q {
      */
     template<typename E, typename T>
         requires std::move_constructible<result_transform_t<T>>
-    Result<result_transform_t<T>, result_transform_t<E>> Ok(T&& value)
+    [[nodiscard]] constexpr Result<result_transform_t<T>, result_transform_t<E>> Ok(T&& value)
         noexcept(std::is_nothrow_constructible_v<result_transform_t<T>, T>) {
         return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<0>, std::forward<T>(value));
     }
@@ -1642,7 +1681,7 @@ namespace C163q {
      */
     template<typename E, typename T, typename ...Args>
         requires std::constructible_from<result_transform_t<T>, Args...>
-    Result<result_transform_t<T>, result_transform_t<E>> Ok(Args&&... args)
+    [[nodiscard]] constexpr Result<result_transform_t<T>, result_transform_t<E>> Ok(Args&&... args)
         noexcept(std::is_nothrow_constructible_v<result_transform_t<T>, Args...>) {
         return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<0>, std::forward<Args>(args)...);
     }
@@ -1667,7 +1706,7 @@ namespace C163q {
      */
     template<typename T, typename E>
         requires std::move_constructible<result_transform_t<E>>
-    Result<result_transform_t<T>, result_transform_t<E>> Err(E&& err)
+    [[nodiscard]] constexpr Result<result_transform_t<T>, result_transform_t<E>> Err(E&& err)
         noexcept(std::is_nothrow_constructible_v<result_transform_t<E>, E>) {
         return Result<result_transform_t<T>, result_transform_t<E>>(std::in_place_index<1>, std::forward<E>(err));
     }
@@ -1692,7 +1731,7 @@ namespace C163q {
      */
     template<typename T, typename E, typename ...Args>
         requires std::constructible_from<result_transform_t<E>, Args...>
-    Result<result_transform_t<T>, result_transform_t<E>> Err(Args&&... args)
+    [[nodiscard]] constexpr Result<result_transform_t<T>, result_transform_t<E>> Err(Args&&... args)
         noexcept(std::is_nothrow_constructible_v<result_transform_t<E>, Args...>) {
         return Result<result_transform_t<T>, result_transform_t<E>>(
                 std::in_place_index<1>, std::forward<Args>(args)...);
