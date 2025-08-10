@@ -1,5 +1,5 @@
-#include "../../src/format/vector.hpp"
-#include "../../src/format/span.hpp"
+#include "../../include/format/vector.hpp"
+#include "../../include/format/span.hpp"
 #include <array>
 #include <cassert>
 #include <format>

@@ -2,8 +2,8 @@
 #include<cstdlib>
 #include<source_location>
 #include<string_view>
-#include"panic.hpp"
-#include"../core/config.hpp"
+#include"../../include/rs/panic.hpp"
+#include"../../include/core/config.hpp"
 #ifdef MY_CXX23
 #include<print>
 #include<stacktrace>

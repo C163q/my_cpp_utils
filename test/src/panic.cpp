@@ -1,4 +1,4 @@
-#include"../../src/rs/panic.hpp"
+#include"../../include/rs/panic.hpp"
 
 int main() {
     C163q::enable_traceback = true;

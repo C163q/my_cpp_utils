@@ -1,6 +1,6 @@
-#include"../../src/rs/result20.hpp"
-#include"../../src/rs/panic.hpp"
-#include"../../src/core/config.hpp"
+#include"../../include/rs/result20.hpp"
+#include"../../include/rs/panic.hpp"
+#include"../../include/core/config.hpp"
 #include<cassert>
 #include<chrono>
 #include<cstddef>
