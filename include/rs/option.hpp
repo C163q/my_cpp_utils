@@ -11,7 +11,6 @@
 #define C163Q_MY_CPP_UTILS_RS_OPTION_HPP
 
 #include"../core/config.hpp"
-#include <variant>
 
 #ifndef MY_CXX20
     static_assert(false, "Require C++20!");
@@ -30,12 +29,16 @@
 #include<tuple>
 #include<type_traits>
 #include<utility>
+#include<variant>
 
 namespace C163q {
 
     template<typename T, typename E>
         requires (std::is_object_v<T> && std::is_object_v<E>) || std::is_same_v<T, void>
     class Result;
+
+    template<typename E>
+    class Result<void, E>;
 
 
     template<typename T>
@@ -406,12 +409,12 @@ namespace C163q {
         }
 
 
-        [[nodiscard]] constexpr T& get_uncheck() {
+        [[nodiscard]] constexpr T& get_uncheck() noexcept {
             return *m_data;
         }
 
 
-        [[nodiscard]] constexpr const T& get_uncheck() const {
+        [[nodiscard]] constexpr const T& get_uncheck() const noexcept {
             return *m_data;
         }
 
@@ -500,7 +503,7 @@ namespace C163q {
 
         template<typename U, typename D, typename F>
             requires (requires (F f, D d, const T& t) {
-                { std::invoke(f, std::move(t)) } -> std::convertible_to<U>;
+                { std::invoke(f, t) } -> std::convertible_to<U>;
                 { std::invoke(d) } -> std::convertible_to<U>;
             })
         [[nodiscard]] constexpr U map(D&& fallback, F&& f) const
@@ -823,7 +826,7 @@ namespace C163q {
             return as_cref_t(std::in_place, std::cref(*m_data));
         }
 
-        
+
         [[nodiscard]] const std::optional<T>& data() const noexcept {
             return m_data;
         }
@@ -861,6 +864,375 @@ namespace C163q {
     private:
         std::optional<T> m_data;
     };
+
+
+    template<>
+    class Option<void> {
+    private:
+        using as_ref_t = Option<void>;
+        using as_cref_t = Option<void>;
+
+    public:
+        using value_type = void;
+
+    public:
+        constexpr Option() : m_data(std::nullopt) {}
+        constexpr Option(std::nullopt_t) : m_data(std::nullopt) {}
+
+        constexpr Option(const Option& other) noexcept : m_data(other.m_data) {}
+        constexpr Option(Option&& other) noexcept : m_data(std::move(other.m_data)) {}
+
+        // 使std::optional能够隐式转换为Option
+        constexpr Option(const std::optional<std::monostate>& other) noexcept
+            : m_data(other) {}
+        constexpr Option(std::optional<std::monostate>&& other) noexcept
+            : m_data(std::move(other)) {}
+
+        template<typename ...Args>
+            requires std::is_constructible_v<std::monostate, Args...>
+        constexpr explicit Option(std::in_place_t, Args&&... args)
+            noexcept(std::is_nothrow_constructible_v<std::monostate, Args...>)
+            : m_data(std::in_place, std::forward<Args>(args)...) {}
+
+        template<typename U, typename ...Args>
+            requires std::is_constructible_v<std::monostate, std::initializer_list<U>&, Args...>
+        constexpr explicit Option(std::in_place_t, std::initializer_list<U> ilist, Args&&... args)
+            noexcept(std::is_nothrow_constructible_v<std::monostate, std::initializer_list<U>&, Args...>)
+            : m_data(std::in_place, ilist, std::forward<Args>(args)...) {}
+
+        constexpr ~Option() = default;
+
+        constexpr Option& operator=(std::nullopt_t) noexcept {
+            m_data.operator=(std::nullopt);
+            return *this;
+        }
+
+        constexpr Option& operator=(const Option& other) noexcept {
+            if (this == std::addressof(other)) return *this;
+            m_data.operator=(other.m_data);
+            return *this;
+        }
+
+        constexpr Option& operator=(Option&& other) noexcept {
+            if (this == std::addressof(other)) return *this;
+            m_data.operator=(std::move(other.m_data));
+            return *this;
+        }
+
+
+        [[nodiscard]] constexpr explicit operator std::optional<std::monostate>() const& noexcept {
+            return m_data;
+        }
+
+        [[nodiscard]] constexpr explicit operator std::optional<std::monostate>() const&& noexcept {
+            return std::move(m_data);
+        }
+
+
+        [[nodiscard]] constexpr bool is_some() const noexcept {
+            return m_data.has_value();
+        }
+
+
+        template<typename F>
+            requires std::predicate<F>
+        [[nodiscard]] constexpr bool is_some_and(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> &&
+                     std::is_nothrow_constructible_v<bool, std::invoke_result_t<F>>) {
+            return is_some() && std::invoke(std::forward<F>(f));
+        }
+
+
+        [[nodiscard]] constexpr bool is_none() const noexcept {
+            return !m_data.has_value();
+        }
+
+
+        template<typename F>
+            requires std::predicate<F>
+        [[nodiscard]] constexpr bool is_none_or(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> &&
+                     std::is_nothrow_constructible_v<bool, std::invoke_result_t<F>>) {
+            return is_none() || std::invoke(std::forward<F>(f));
+        }
+
+
+        constexpr void expect(const std::string_view& msg) const {
+            if (is_some()) return;
+            call_panic_with_TN_uncheck<1>(msg, ": ");
+        }
+
+
+        constexpr void unwrap() const {
+            if (is_some()) return;
+            call_panic_with_TN_uncheck<1>("", "");
+        }
+
+
+        constexpr void unwrap_or() const noexcept {
+            return;
+        }
+
+        template<typename F>
+            requires requires (F f) {
+                { std::invoke(f) };
+            }
+        constexpr void unwrap_or(F&& f) const noexcept(std::is_nothrow_invocable_v<F>) {
+            if (is_some()) return;
+            std::invoke(std::forward<F>(f));
+            return;
+        }
+
+
+        constexpr void unwrap_unchecked() const {
+            return;
+        }
+
+
+        constexpr const void get() const {
+            try {
+                return;
+            } catch (...) {
+                panic("Option has no value");
+            }
+        }
+
+        constexpr const void get_uncheck() const noexcept {
+            return;
+        }
+
+
+        template<typename U, typename F>
+            requires requires (F f) {
+                { std::invoke(f) } -> std::convertible_to<U>;
+            }
+        [[nodiscard]] constexpr Option<U> map(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> &&
+                     std::is_nothrow_constructible_v<Option<U>, std::in_place_t, std::invoke_result_t<F>>) {
+            if (is_some()) return Option<U>(std::in_place, std::invoke(std::forward<F>(f)));
+            return std::nullopt;
+        }
+
+
+        template<typename F>
+            requires std::invocable<F>
+        [[nodiscard]] constexpr const Option& inspect(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F>) {
+            if (is_some()) std::invoke(std::forward<F>(f));
+            return *this;
+        }
+
+
+        template<typename U, typename F>
+            requires (requires (F f) {
+                { std::invoke(f) } -> std::convertible_to<U>;
+            } && std::is_move_constructible_v<U>)
+        [[nodiscard]] constexpr U map(U default_value, F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> && std::is_nothrow_move_constructible_v<U> &&
+                     std::is_nothrow_constructible_v<U, std::invoke_result_t<F>>) {
+            if (is_some()) std::invoke(std::forward<F>(f));
+            return default_value;
+        }
+
+
+        template<typename U, typename D, typename F>
+            requires (requires (F f, D d) {
+                { std::invoke(f) } -> std::convertible_to<U>;
+                { std::invoke(d) } -> std::convertible_to<U>;
+            })
+        [[nodiscard]] constexpr U map(D&& fallback, F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> && std::is_nothrow_invocable_v<U> &&
+                     std::is_nothrow_move_constructible_v<U> &&
+                     std::is_nothrow_constructible_v<U, std::invoke_result_t<F>> &&
+                     std::is_nothrow_constructible_v<U, std::invoke_result_t<D>>) {
+            if (is_some()) std::invoke(std::forward<F>(f));
+            return std::invoke(std::forward<D>(fallback));
+        }
+
+
+        template<typename E>
+            requires std::is_move_constructible_v<E>
+        [[nodiscard]] constexpr Result<void, E> ok_or(E err) const
+            noexcept(std::is_nothrow_move_constructible_v<E> &&
+                     std::is_nothrow_constructible_v<Result<void, E>, std::in_place_index_t<0>> &&
+                     std::is_nothrow_constructible_v<Result<void, E>, std::in_place_index_t<1>, E>) {
+            if (is_some()) return Result<void, E>(std::in_place_index<0>);
+            return Result<void, E>(std::in_place_index<1>, std::move(err));
+        }
+
+
+        template<typename E, typename F>
+            requires (requires (F&& err) {
+                { std::invoke(err) } -> std::convertible_to<E>;
+            })
+        [[nodiscard]] constexpr Result<void, E> ok_or_else(F&& err) const
+            noexcept(std::is_nothrow_constructible_v<Result<void, E>, std::in_place_index_t<0>> &&
+                     std::is_nothrow_constructible_v<Result<void, E>, std::in_place_index_t<1>, std::invoke_result_t<F>>) {
+            if (is_some()) return Result<void, E>(std::in_place_index<0>);
+            return Result<void, E>(std::in_place_index<1>, std::invoke(std::forward<F>(err)));
+        }
+
+
+        template<typename U>
+            requires std::is_move_constructible_v<U>
+        [[nodiscard]] constexpr Option<U> and_then(Option<U> other) const
+            noexcept(std::is_nothrow_move_constructible_v<U>) {
+            if (is_some()) return other;
+            return std::nullopt;
+        }
+
+
+        template<typename U, typename F>
+            requires requires (F f) {
+                { std::invoke(f) } -> std::convertible_to<Option<U>>;
+            }
+        [[nodiscard]] constexpr Option<U> and_then(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> &&
+                     std::is_nothrow_constructible_v<Option<U>, std::invoke_result_t<F>>) {
+            if (is_some()) std::invoke(f);
+            return std::nullopt;
+        }
+
+
+        template<typename P>
+            requires std::predicate<P>
+        [[nodiscard]] constexpr Option<void> filter(P&& predicate) const
+            noexcept(std::is_nothrow_invocable_v<P>) {
+            if (is_none()) return std::nullopt;
+            if (std::invoke(predicate)) return *this;
+            return std::nullopt;
+        }
+
+
+        [[nodiscard]] constexpr Option<void> or_else(Option<void> other) const noexcept {
+            if (is_some()) return *this;
+            return other;
+        }
+
+
+        template<typename F>
+            requires requires (F f) {
+                { std::invoke(f) } -> std::convertible_to<Option<void>>;
+            }
+        [[nodiscard]] constexpr Option<void> or_else(F&& f) const
+            noexcept(std::is_nothrow_invocable_v<F> &&
+                     std::is_nothrow_constructible_v<Option<void>, std::invoke_result_t<F>>) {
+            if (is_some()) return *this;
+            return std::invoke(std::forward<F>(f));
+        }
+
+
+        [[nodiscard]] constexpr Option<void> xor_else(Option<void> other) const noexcept {
+            if (is_some() == other.is_some()) return std::nullopt;
+            if (is_some()) return *this;
+            return other;
+        }
+
+
+        [[nodiscard]] constexpr Option<void>& insert() noexcept {
+            m_data.emplace();
+            return *this;
+        }
+
+
+        constexpr void get_or_insert()
+            noexcept {
+            m_data.emplace();
+            return;
+        }
+
+
+        template<typename F>
+        constexpr void get_or_insert(F&& f)
+            noexcept(std::is_nothrow_invocable_v<F>) {
+            if (is_some()) return;
+            std::invoke(std::forward<F>(f));
+            m_data.emplace();
+        }
+
+
+        [[nodiscard]] constexpr Option<void> take() noexcept {
+            Option<void> ret(*this);
+            m_data.reset();
+            return ret;
+        }
+
+
+        template<typename P>
+            requires std::predicate<P>
+        [[nodiscard]] constexpr Option<void> take(P&& predicate)
+            noexcept(std::is_nothrow_invocable_v<P> &&
+                     std::is_nothrow_constructible_v<bool, std::invoke_result_t<P>>) {
+            if (is_none()) return std::nullopt;
+            if (std::invoke(predicate)) return take();
+            return std::nullopt;
+        }
+
+
+        [[nodiscard]] constexpr Option<void> replace() noexcept {
+            Option<void> ret(std::in_place);
+            m_data.swap(ret.m_data);
+            return ret;
+        }
+
+
+        [[nodiscard]] constexpr Option<void> clone() const noexcept {
+            return *this;
+        }
+
+
+        [[nodiscard]] constexpr const Option& as_const() const noexcept {
+            return *this;
+        }
+
+
+        [[nodiscard]] constexpr Option& as_mut() const noexcept {
+            return const_cast<Option&>(*this);
+        }
+
+
+        [[nodiscard]] constexpr as_ref_t as_ref() noexcept {
+            if (is_none()) return std::nullopt;
+            return as_ref_t(std::in_place);
+        }
+
+
+        [[nodiscard]] constexpr as_cref_t as_ref() const noexcept {
+            return as_cref();
+        }
+
+
+        [[nodiscard]] constexpr as_cref_t as_cref() const noexcept {
+            if (is_none()) return std::nullopt;
+            return as_cref_t(std::in_place);
+        }
+
+
+        [[nodiscard]] const std::optional<std::monostate>& data() const noexcept {
+            return m_data;
+        }
+
+    private:
+        /**
+         * @brief 调用panic，同时，若类型是formattable时，打印其值
+         */
+        template<size_t I>
+            requires (I == 0 || I == 1)
+        [[noreturn]] constexpr void call_panic_with_TN_uncheck(const std::string_view& msg, const std::string_view& sep) const {
+            if constexpr (I == 1) {
+                auto && str = std::format("{}{}{}", msg, sep, "None");
+                panic(str);
+            }
+            else {
+                auto&& str = std::format("{}{}{}", msg, sep, "void");
+                panic(str);
+            }
+        }
+
+    private:
+        std::optional<std::monostate> m_data;
+    };
+
 
 
     template<class T>

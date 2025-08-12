@@ -29,17 +29,10 @@
 #include<type_traits>
 #include<utility>
 #include<variant>
-#include"option.hpp"
 #include"panic.hpp"
 
 namespace C163q {
 
-    template<typename T>
-        requires (std::is_object_v<T> && !std::is_array_v<T> &&
-                 !std::is_same_v<std::remove_cv_t<T>, std::nullopt_t> &&
-                 !std::is_same_v<std::remove_cv_t<T>, std::in_place_t>) ||
-                  std::is_same_v<T, void>
-    class Option;
 
     /**
      * @brief Rust当中的Result枚举类型，表示有可能成功（返回值）或者失败（返回异常）的类型。
@@ -313,12 +306,12 @@ namespace C163q {
         }
 
         /**
-         * @brief 将Result<T, E>转换为Option<T>
+         * @brief 将Result<T, E>转换为std::optional<T>
          *
-         * 将自身转换为Option<T>，自身保有的值将会被移动，若为Err状态，则为空值。
+         * 将自身转换为std::optional<T>，自身保有的值将会被移动，若为Err状态，则为空值。
          *
-         * @return 一个Option<T>。在Ok状态下，移动构造一个有值的Option<T>，
-         *         在Err状态下，返回一个无值的Option<T>
+         * @return 一个std::optional<T>。在Ok状态下，移动构造一个有值的std::optional<T>，
+         *         在Err状态下，返回一个无值的std::optional<T>
          *
          * @example
          * ```
@@ -331,18 +324,18 @@ namespace C163q {
          * assert(y.ok().is_some() == false);
          * ```
          */
-        [[nodiscard]] constexpr Option<T> ok() noexcept(std::is_nothrow_move_constructible_v<T>) {
+        [[nodiscard]] constexpr std::optional<T> ok() noexcept(std::is_nothrow_move_constructible_v<T>) {
             if (is_err()) return std::nullopt;
-            return Option<T>(std::in_place, std::move(get<0>()));
+            return std::optional<T>(std::in_place, std::move(get<0>()));
         }
 
         /**
-         * @brief 将Result<T, E>转换为Option<E>
+         * @brief 将Result<T, E>转换为std::optional<E>
          *
-         * 将自身转换为Option<E>，自身保有的值将会被移动，若为Ok状态，则为空值。
+         * 将自身转换为std::optional<E>，自身保有的值将会被移动，若为Ok状态，则为空值。
          *
-         * @return 一个Option<E>。在Err状态下，移动构造一个有值的Option<E>，
-         *         在Err状态下，返回一个无值的Option<E>
+         * @return 一个std::optional<E>。在Err状态下，移动构造一个有值的std::optional<E>，
+         *         在Err状态下，返回一个无值的std::optional<E>
          *
          * @example
          * ```
@@ -353,9 +346,9 @@ namespace C163q {
          * assert(y.err().unwrap()[0] == 'E');
          * ```
          */
-        [[nodiscard]] constexpr Option<E> err() noexcept(std::is_nothrow_move_constructible_v<E>) {
+        [[nodiscard]] constexpr std::optional<E> err() noexcept(std::is_nothrow_move_constructible_v<E>) {
             if (is_ok()) return std::nullopt;
-            return Option<E>(std::in_place, std::move(get<1>()));
+            return std::optional<E>(std::in_place, std::move(get<1>()));
         }
 
         /**
@@ -1325,16 +1318,15 @@ namespace C163q {
             return m_data;
         }
 
-        // FIXME: 理论上应当返回std::optional<void>，但std::optional不允许含有void值，
-        //        等待手动实现一个Option<T>后，再修改这里！
+
         [[nodiscard]] constexpr std::optional<std::monostate> ok() noexcept {
             if (is_err()) return std::nullopt;
-            return std::move(get<0>());
+            return std::optional<std::monostate>(std::in_place);
         }
 
         [[nodiscard]] constexpr std::optional<E> err() noexcept(std::is_nothrow_move_constructible_v<E>) {
             if (is_ok()) return std::nullopt;
-            return std::move(get<1>());
+            return std::optional<E>(std::in_place, std::move(get<1>()));
         }
 
         template<typename U, typename F>
@@ -1532,6 +1524,30 @@ namespace C163q {
         constexpr void unwrap_or() const noexcept {
             return;
         }
+
+
+        template<typename F>
+            requires requires (F f, E e) {
+                { std::invoke(f, std::move(e)) };
+            }
+        constexpr void unwrap_or(F&& op)
+        noexcept(std::is_nothrow_invocable_v<F, E&&> && std::is_nothrow_move_constructible_v<E>) {
+            if (is_ok()) return;
+            std::invoke(std::forward<F>(op), std::move(get<1>()));
+            return;
+        }
+
+        template<typename F>
+            requires requires (F f, const E& e) {
+                { std::invoke(f, e) };
+            }
+        constexpr void unwrap_or(F&& op) const
+        noexcept(std::is_nothrow_invocable_v<F, const E&>) {
+            if (is_ok()) return;
+            std::invoke(std::forward<F>(op), get<1>());
+            return;
+        }
+
 
         [[nodiscard]] constexpr Result<void, E> clone() const noexcept(std::is_nothrow_copy_constructible_v<Result<void, E>>) {
             return *this;
