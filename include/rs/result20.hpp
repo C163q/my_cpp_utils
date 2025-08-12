@@ -517,7 +517,7 @@ namespace C163q {
          * @param 用于映射的可调用对象，接收一个T并返回一个可以构造为U的类型
          * 
          * @tparam U 返回的Result中，处于Ok状态时保有的值的类型，func的返回值应该能够转换为该类型
-         * @tparam F 可调用对象的类型                                                                                             @example
+         * @tparam F 可调用对象的类型
          * 
          * @example
          * ```
